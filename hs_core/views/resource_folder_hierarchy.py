@@ -4,6 +4,7 @@ import os
 
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse
+
 from rest_framework.decorators import api_view
 from rest_framework.exceptions import NotFound, status, PermissionDenied, \
     ValidationError as DRF_ValidationError
@@ -70,14 +71,45 @@ def data_store_structure(request):
     res_coll = os.path.join(resource.root_path, store_path)
     try:
         store = istorage.listdir(res_coll)
+        files = []
         dirs = []
-        for dname in store[0]:  # directories
+        for dname in store[0]:     # directories
             d_pk = dname.decode('utf-8')
             name_with_full_path = os.path.join(res_coll, d_pk)
             d_url = to_external_url(istorage.url(name_with_full_path))
-            dirs.append({'name': d_pk, 'url': d_url})
+            main_file = ''
+            folder_aggregation_type = ''
+            folder_aggregation_name = ''
+            folder_aggregation_id = ''
+            folder_aggregation_type_to_set = ''
+            folder_short_path = os.path.join(store_path, d_pk)
+            if resource.resource_type == "CompositeResource":
+                dir_path = name_with_full_path
+                # find if this folder *dir_path* represents (contains) an aggregation object
+                aggregation_object = resource.get_folder_aggregation_object(dir_path)
+                # folder aggregation type is not relevant for single file aggregation types - which
+                # are: GenericLogicalFile, and RefTimeseriesLogicalFile
+                if aggregation_object is not None and not \
+                        aggregation_object.is_single_file_aggregation:
+                    folder_aggregation_type = aggregation_object.get_aggregation_class_name()
+                    folder_aggregation_name = aggregation_object.get_aggregation_display_name()
+                    folder_aggregation_id = aggregation_object.id
+                    main_file = aggregation_object.get_main_file.file_name
+                else:
+                    # find if any aggregation type can be created from this folder
+                    folder_aggregation_type_to_set = resource.get_folder_aggregation_type_to_set(
+                        dir_path)
+                    if folder_aggregation_type_to_set is None:
+                        folder_aggregation_type_to_set = ""
+            dirs.append({'name': d_pk,
+                         'url': d_url,
+                         'main_file': main_file,
+                         'folder_aggregation_type': folder_aggregation_type,
+                         'folder_aggregation_name': folder_aggregation_name,
+                         'folder_aggregation_id': folder_aggregation_id,
+                         'folder_aggregation_type_to_set': folder_aggregation_type_to_set,
+                         'folder_short_path': folder_short_path})
 
-        files = []
         for fname in store[1]:  # files
             fname = fname.decode('utf-8')
             name_with_full_path = os.path.join(res_coll, fname)
@@ -90,18 +122,21 @@ def data_store_structure(request):
             f_url = ''
             logical_file_type = ''
             logical_file_id = ''
+            aggregation_name = ''
             for f in ResourceFile.objects.filter(object_id=resource.id):
                 if name_with_full_path == f.storage_path:
                     f_pk = f.pk
                     f_url = to_external_url(get_resource_file_url(f))
                     if resource.resource_type == "CompositeResource":
-                        f_logical = f.get_or_create_logical_file
-                        logical_file_type = f.logical_file_type_name
-                        logical_file_id = f_logical.id
+                        if f.has_logical_file:
+                            logical_file_type = f.logical_file_type_name
+                            logical_file_id = f.logical_file.id
+                            aggregation_name = f.aggregation_display_name
                     break
 
             if f_pk:  # file is found in Django
                 files.append({'name': fname, 'size': size, 'type': mtype, 'pk': f_pk, 'url': f_url,
+                              'aggregation_name': aggregation_name,
                               'logical_type': logical_file_type,
                               'logical_file_id': logical_file_id})
             else:  # file is not found in Django

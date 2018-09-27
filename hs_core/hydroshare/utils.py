@@ -247,14 +247,16 @@ def get_fed_zone_files(irods_fnames):
 
 
 # TODO: make the local cache file (and cleanup) part of ResourceFile state?
-def get_file_from_irods(res_file):
+def get_file_from_irods(res_file, temp_dir=None):
     """
     Copy the file (res_file) from iRODS (local or federated zone)
     over to django (temp directory) which is
     necessary for manipulating the file (e.g. metadata extraction).
     Note: The caller is responsible for cleaning the temp directory
 
-    :param res_file: an instance of ResourceFile
+    :param  res_file: an instance of ResourceFile
+    :param  temp_dir: (optional) existing temp directory to which the file will be copied from
+    irods. If temp_dir is None then a new temporary directory will be created.
     :return: location of the copied file
     """
     res = res_file.resource
@@ -262,20 +264,20 @@ def get_file_from_irods(res_file):
     res_file_path = res_file.storage_path
     file_name = os.path.basename(res_file_path)
 
-    tmpdir = os.path.join(settings.TEMP_FILE_DIR, uuid4().hex)
-    tmpfile = os.path.join(tmpdir, file_name)
+    if temp_dir is not None:
+        if not temp_dir.startswith(settings.TEMP_FILE_DIR):
+            raise ValueError("Specified temp directory is not valid")
+        elif not os.path.exists(temp_dir):
+            raise ValueError("Specified temp directory doesn't exist")
 
-    # TODO: If collisions occur, really bad things happen.
-    # TODO: Directories are never cleaned up when unused. need cache management.
-    try:
-        os.makedirs(tmpdir)
-    except OSError as ex:
-        if ex.errno == errno.EEXIST:
+        tmpdir = temp_dir
+    else:
+        tmpdir = os.path.join(settings.TEMP_FILE_DIR, uuid4().hex)
+        if os.path.exists(tmpdir):
             shutil.rmtree(tmpdir)
-            os.makedirs(tmpdir)
-        else:
-            raise Exception(ex.message)
+        os.makedirs(tmpdir)
 
+    tmpfile = os.path.join(tmpdir, file_name)
     istorage.getFile(res_file_path, tmpfile)
     copied_file = tmpfile
     return copied_file
@@ -516,6 +518,9 @@ def copy_and_create_metadata(src_res, dest_res):
     # create the key/value metadata
     dest_res.extra_metadata = copy.deepcopy(src_res.extra_metadata)
     dest_res.save()
+    # generate metadata and map xml files for logical files in the target resource
+    for logical_file in dest_res.logical_files:
+        logical_file.create_aggregation_xml_documents()
 
 
 # TODO: should be BaseResource.mark_as_modified.
@@ -905,8 +910,11 @@ def resource_file_add_process(resource, files, user, extract_metadata=False,
     if __debug__:
         assert(isinstance(source_names, list))
     folder = kwargs.pop('folder', None)
+    full_paths = kwargs.pop('full_paths', {})
+    auto_aggregate = kwargs.pop('auto_aggregate', True)
     resource_file_objects = add_resource_files(resource.short_id, *files, folder=folder,
-                                               source_names=source_names)
+                                               source_names=source_names, full_paths=full_paths,
+                                               auto_aggregate=auto_aggregate)
 
     # receivers need to change the values of this dict if file validation fails
     # in case of file validation failure it is assumed the resource type also deleted the file
@@ -933,12 +941,13 @@ def create_empty_contents_directory(resource):
 
 
 def add_file_to_resource(resource, f, folder=None, source_name='',
-                         move=False):
+                         move=False, check_target_folder=False):
     """
     Add a ResourceFile to a Resource.  Adds the 'format' metadata element to the resource.
-    :param resource: Resource to which file should be added
-    :param f: File-like object to add to a resource
-    :param source_name: the logical file name of the resource content file for
+    :param  resource: Resource to which file should be added
+    :param  f: File-like object to add to a resource
+    :param  folder: folder at which the file will live
+    :param  source_name: the logical file name of the resource content file for
                         federated iRODS resource or the federated zone name;
                         By default, it is empty. A non-empty value indicates
                         the file needs to be added into the federated zone, either
@@ -946,19 +955,27 @@ def add_file_to_resource(resource, f, folder=None, source_name='',
                         disk, or from the federated zone directly where f is empty
                         but source_name has the whole data object
                         iRODS path in the federated zone
-    :param move: indicate whether the file should be copied or moved from private user
+    :param  move: indicate whether the file should be copied or moved from private user
                  account to proxy user account in federated zone; A value of False
                  indicates copy is needed, a value of True indicates no copy, but
                  the file will be moved from private user account to proxy user account.
                  The default value is False.
 
+    :param  check_target_folder: if true and the resource is a composite resource then uploading
+    a file to the specified folder will be validated before adding the file to the resource
     :return: The identifier of the ResourceFile added.
     """
 
-    # importing here to avoid circular import
-    from hs_file_types.models import GenericLogicalFile
+    # validate parameters
+    if check_target_folder and resource.resource_type != 'CompositeResource':
+        raise ValidationError("Resource must be a CompositeResource for validating target folder")
 
     if f:
+        if check_target_folder and folder is not None:
+                tgt_full_upload_path = os.path.join(resource.file_path, folder)
+                if not resource.can_add_files(target_full_path=tgt_full_upload_path):
+                    err_msg = "File can't be added to this folder which represents an aggregation"
+                    raise ValidationError(err_msg)
         openfile = File(f) if not isinstance(f, UploadedFile) else f
         ret = ResourceFile.create(resource, openfile, folder=folder, source=None, move=False)
 
@@ -987,13 +1004,6 @@ def add_file_to_resource(resource, f, folder=None, source_name='',
     # TODO: generate this from data in ResourceFile rather than extension
     if file_format_type not in [mime.value for mime in resource.metadata.formats.all()]:
         resource.metadata.create_element('format', value=file_format_type)
-
-    # if a file gets added successfully to composite resource, then better to set the generic
-    # logical file here
-    if resource.resource_type == "CompositeResource":
-        logical_file = GenericLogicalFile.create()
-        ret.logical_file_content_object = logical_file
-        ret.save()
 
     return ret
 

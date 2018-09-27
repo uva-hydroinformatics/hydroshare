@@ -1329,10 +1329,6 @@ class Coverage(AbstractMetaDataElement):
                             raise ValidationError("Value for '{}' must be numeric"
                                                   .format(value_item))
 
-            if value_dict['northlimit'] < value_dict['southlimit']:
-                raise ValidationError("Value for North latitude must be greater than or equal to "
-                                      "that of South latitude.")
-
             if value_dict['northlimit'] < -90 or value_dict['northlimit'] > 90:
                 raise ValidationError("Value for North latitude should be "
                                       "in the range of -90 to 90")
@@ -1341,9 +1337,11 @@ class Coverage(AbstractMetaDataElement):
                 raise ValidationError("Value for South latitude should be "
                                       "in the range of -90 to 90")
 
-            if value_dict['eastlimit'] < value_dict['westlimit']:
-                raise ValidationError("Value for East longitude must be greater than or equal to "
-                                      "that of West longitude.")
+            if (value_dict['northlimit'] < 0 and value_dict['southlimit'] < 0) or (
+                    value_dict['northlimit'] > 0 and value_dict['southlimit'] > 0):
+                if value_dict['northlimit'] < value_dict['southlimit']:
+                    raise ValidationError("Value for North latitude must be greater than or "
+                                          "equal to that of South latitude.")
 
             if value_dict['eastlimit'] < -180 or value_dict['eastlimit'] > 180:
                 raise ValidationError("Value for East longitude should be "
@@ -1352,6 +1350,12 @@ class Coverage(AbstractMetaDataElement):
             if value_dict['westlimit'] < -180 or value_dict['westlimit'] > 180:
                 raise ValidationError("Value for West longitude should be "
                                       "in the range of -180 to 180")
+
+            if (value_dict['eastlimit'] < 0 and value_dict['westlimit'] < 0) or (
+                    value_dict['eastlimit'] > 0 and value_dict['westlimit'] > 0):
+                if value_dict['eastlimit'] < value_dict['westlimit']:
+                    raise ValidationError("Value for East longitude must be greater than or "
+                                          "equal to that of West longitude.")
 
     def get_html(self, pretty=True):
         """Use the dominate module to generate element display HTML.
@@ -2213,14 +2217,24 @@ class AbstractResource(ResourcePermissionsMixin, ResourceIRODSMixin):
         return generic_logical_files_list
 
     def get_logical_files(self, logical_file_class_name):
-        """Get list of logical files for a specified class name."""
-        logical_files_list = []
-        for res_file in self.files.all():
-            if res_file.logical_file is not None:
-                if res_file.logical_file_type_name == logical_file_class_name:
-                    if res_file.logical_file not in logical_files_list:
-                        logical_files_list.append(res_file.logical_file)
+        """Get a list of logical files (aggregations) for a specified logical file class name."""
+
+        logical_files_list = [lf for lf in self.logical_files if
+                              lf.type_name() == logical_file_class_name]
+
         return logical_files_list
+
+    @property
+    def has_logical_spatial_coverage(self):
+        """Checks if any of the logical files has spatial coverage"""
+
+        return any(lf.metadata.spatial_coverage is not None for lf in self.logical_files)
+
+    @property
+    def has_logical_temporal_coverage(self):
+        """Checks if any of the logical files has temporal coverage"""
+
+        return any(lf.metadata.temporal_coverage is not None for lf in self.logical_files)
 
     @property
     def supports_logical_file(self):
@@ -3058,24 +3072,34 @@ class ResourceFile(ResourceFileIRODSMixin):
 
     # TODO: move to BaseResource as instance method
     @classmethod
-    def list_folder(cls, resource, folder):
-        """List a given folder.
+    def list_folder(cls, resource, folder, sub_folders=True):
+        """List files (instances of ResourceFile) in a given folder.
 
         :param resource: resource for which to list the folder
         :param folder: folder listed as either short_path or fully qualified path
+        :param sub_folders: if true files from sub folders of *folder* will be included in the list
         """
+        file_folder_to_match = folder
         if folder is None:
             folder = resource.file_path
         elif not folder.startswith(resource.file_path):
             folder = os.path.join(resource.file_path, folder)
-        if resource.is_federated:
-            return ResourceFile.objects.filter(
-                object_id=resource.id,
-                fed_resource_file__startswith=folder)
+        else:
+            file_folder_to_match = folder[len(resource.file_path) + 1:]
+
+        if sub_folders:
+            if resource.is_federated:
+                return ResourceFile.objects.filter(
+                    object_id=resource.id,
+                    fed_resource_file__startswith=folder)
+            else:
+                return ResourceFile.objects.filter(
+                    object_id=resource.id,
+                    resource_file__startswith=folder)
         else:
             return ResourceFile.objects.filter(
                 object_id=resource.id,
-                resource_file__startswith=folder)
+                file_folder=file_folder_to_match)
 
     # TODO: move to BaseResource as instance method
     @classmethod
@@ -3130,8 +3154,13 @@ class ResourceFile(ResourceFileIRODSMixin):
 
     @property
     def logical_file_type_name(self):
-        """Return classname of logical file's content object."""
+        """Return class name of logical file's content object."""
         return self.logical_file_content_object.__class__.__name__
+
+    @property
+    def aggregation_display_name(self):
+        """Return a name for the logical file type (aggregation)- used in UI"""
+        return self.logical_file.get_aggregation_display_name()
 
     @property
     def has_generic_logical_file(self):
@@ -3171,12 +3200,6 @@ class ResourceFile(ResourceFileIRODSMixin):
     def file_name(self):
         """Return filename of resource file."""
         return os.path.basename(self.storage_path)
-
-    @property
-    def can_set_file_type(self):
-        """Check if file type can be set for this resource file instance."""
-        return self.extension in ('.tif', '.zip', '.nc', '.shp', '.refts') and \
-            (self.logical_file is None or self.logical_file_type_name == "GenericLogicalFile")
 
     @property
     def url(self):
@@ -3640,6 +3663,14 @@ class CoreMetaData(models.Model):
     def publisher(self):
         """Return the first _publisher object from metadata."""
         return self._publisher.all().first()
+
+    @property
+    def spatial_coverage(self):
+        return self.coverages.exclude(type='period').first()
+
+    @property
+    def temporal_coverage(self):
+        return self.coverages.filter(type='period').first()
 
     @property
     def serializer(self):
