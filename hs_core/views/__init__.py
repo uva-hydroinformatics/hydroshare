@@ -10,7 +10,6 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group, User
 from django.contrib.sites.models import Site
 from django.contrib import messages
-from django.contrib.messages import get_messages
 from django.utils.decorators import method_decorator
 from django.core.exceptions import ValidationError, PermissionDenied, ObjectDoesNotExist
 from django.http import HttpResponseRedirect, HttpResponse, JsonResponse, \
@@ -22,6 +21,7 @@ from django.db import Error, IntegrityError
 from django import forms
 from django.views.generic import TemplateView
 from django.core.urlresolvers import reverse
+from django.forms.models import model_to_dict
 
 from rest_framework import status
 from rest_framework.decorators import api_view
@@ -39,6 +39,7 @@ from hs_core import hydroshare
 from hs_core.hydroshare.utils import get_resource_by_shortkey, resource_modified, resolve_request
 from .utils import authorize, upload_from_irods, ACTION_TO_AUTHORIZE, run_script_to_update_hyrax_input_files, \
     get_my_resources_list, send_action_to_take_email, get_coverage_data_dict
+
 from hs_core.models import GenericResource, resource_processor, CoreMetaData, Subject
 from hs_core.hydroshare.resource import METADATA_STATUS_SUFFICIENT, METADATA_STATUS_INSUFFICIENT, \
     replicate_resource_bag_to_user_zone, update_quota_usage as update_quota_usage_utility
@@ -182,19 +183,18 @@ def add_files_to_resource(request, shortkey, *args, **kwargs):
         elif file_folder.startswith("data/contents/"):
             file_folder = file_folder[len("data/contents/"):]
 
-
     try:
         utils.resource_file_add_pre_process(resource=resource, files=res_files, user=request.user,
                                             extract_metadata=extract_metadata,
                                             folder=file_folder)
 
     except hydroshare.utils.ResourceFileSizeException as ex:
-        msg = 'file_size_error: ' + ex.message
-        return HttpResponse(msg, status=500)
+        msg = {'file_size_error': ex.message}
+        return JsonResponse(msg, status=500)
 
     except (hydroshare.utils.ResourceFileValidationException, Exception) as ex:
-        msg = 'validation_error: ' + ex.message
-        return HttpResponse(msg, status=500)
+        msg = {'validation_error': ex.message}
+        return JsonResponse(msg, status=500)
 
     try:
         hydroshare.utils.resource_file_add_process(resource=resource, files=res_files,
@@ -204,11 +204,26 @@ def add_files_to_resource(request, shortkey, *args, **kwargs):
                                                    auto_aggregate=auto_aggregate)
 
     except (hydroshare.utils.ResourceFileValidationException, Exception) as ex:
-        msg = 'validation_error: ' + ex.message
-        return HttpResponse(msg, status=500)
+        msg = {'validation_error': ex.message}
+        return JsonResponse(msg, status=500)
 
-    return HttpResponse(status=200)
+    res_public_status = 'public' if resource.raccess.public else 'not public'
+    res_discoverable_status = 'discoverable' if resource.raccess.discoverable \
+        else 'not discoverable'
 
+    if resource.can_be_public_or_discoverable:
+        metadata_status = METADATA_STATUS_SUFFICIENT
+    else:
+        metadata_status = METADATA_STATUS_INSUFFICIENT
+
+    response_data = {
+        'res_public_status': res_public_status,
+        'res_discoverable_status': res_discoverable_status,
+        'metadata_status': metadata_status,
+    }
+
+    return JsonResponse(data=response_data, status=200)
+    
 
 def _get_resource_sender(element_name, resource):
     core_metadata_element_names = [el_name.lower() for el_name in CoreMetaData.get_supported_element_names()]
@@ -288,9 +303,12 @@ def update_key_value_metadata(request, shortkey, *args, **kwargs):
 
     return HttpResponseRedirect(request.META['HTTP_REFERER'])
 
-@api_view(['POST'])
+@api_view(['POST', 'GET'])
 def update_key_value_metadata_public(request, pk):
     res, _, _ = authorize(request, pk, needed_permission=ACTION_TO_AUTHORIZE.EDIT_RESOURCE)
+
+    if request.method == 'GET':
+        return HttpResponse(status=200, content=json.dumps(res.extra_metadata))
 
     post_data = request.data.copy()
     res.extra_metadata = post_data
@@ -433,6 +451,34 @@ def add_metadata_element(request, shortkey, element_name, *args, **kwargs):
     return HttpResponseRedirect(request.META['HTTP_REFERER'])
 
 
+def get_resource_metadata(request, shortkey, *args, **kwargs):
+    """Returns resource level metadata that is needed to update UI
+    Only the following resource level metadata is returned for now:
+    title
+    abstract
+    keywords
+    creators
+    spatial coverage
+    temporal coverage
+    """
+    resource, _, _ = authorize(request, shortkey,
+                               needed_permission=ACTION_TO_AUTHORIZE.VIEW_RESOURCE)
+    res_metadata = dict()
+    res_metadata['title'] = resource.metadata.title.value
+    if resource.metadata.description:
+        res_metadata['abstract'] = resource.metadata.description.abstract
+    else:
+        res_metadata['abstract'] = None
+    creators = []
+    for creator in resource.metadata.creators.all():
+        creators.append(model_to_dict(creator))
+    res_metadata['creators'] = creators
+    res_metadata['keywords'] = [sub.value for sub in resource.metadata.subjects.all()]
+    res_metadata['spatial_coverage'] = get_coverage_data_dict(resource)
+    res_metadata['temporal_coverage'] = get_coverage_data_dict(resource, coverage_type='temporal')
+    return JsonResponse(res_metadata, status=200)
+
+
 def update_metadata_element(request, shortkey, element_name, element_id, *args, **kwargs):
     res, _, _ = authorize(request, shortkey, needed_permission=ACTION_TO_AUTHORIZE.EDIT_RESOURCE)
     sender_resource = _get_resource_sender(element_name, res)
@@ -557,6 +603,7 @@ def delete_file(request, shortkey, f, *args, **kwargs):
     res, _, user = authorize(request, shortkey, needed_permission=ACTION_TO_AUTHORIZE.EDIT_RESOURCE)
     hydroshare.delete_resource_file(shortkey, f, user)  # calls resource_modified
     request.session['resource-mode'] = 'edit'
+
     return HttpResponseRedirect(request.META['HTTP_REFERER'])
 
 
@@ -577,6 +624,7 @@ def delete_multiple_files(request, shortkey, *args, **kwargs):
             logger.warn(ex.message)
             continue
     request.session['resource-mode'] = 'edit'
+
     return HttpResponseRedirect(request.META['HTTP_REFERER'])
 
 
@@ -760,41 +808,44 @@ def publish(request, shortkey, *args, **kwargs):
 
 def set_resource_flag(request, shortkey, *args, **kwargs):
     # only resource owners are allowed to change resource flags
+    ajax_response_data = {'status': 'error', 'message': ''}
     res, _, user = authorize(request, shortkey, needed_permission=ACTION_TO_AUTHORIZE.SET_RESOURCE_FLAG)
     flag = resolve_request(request).get('flag', None)
+    message = None
     if flag == 'make_public':
-        _set_resource_sharing_status(request, user, res, flag_to_set='public', flag_value=True)
+        message = _set_resource_sharing_status(user, res, flag_to_set='public', flag_value=True)
     elif flag == 'make_private' or flag == 'make_not_discoverable':
-        _set_resource_sharing_status(request, user, res, flag_to_set='discoverable', flag_value=False)
+        message = _set_resource_sharing_status(user, res, flag_to_set='discoverable', flag_value=False)
     elif flag == 'make_discoverable':
-        _set_resource_sharing_status(request, user, res, flag_to_set='discoverable', flag_value=True)
+        message = _set_resource_sharing_status(user, res, flag_to_set='discoverable', flag_value=True)
     elif flag == 'make_not_shareable':
-        _set_resource_sharing_status(request, user, res, flag_to_set='shareable', flag_value=False)
+        message = _set_resource_sharing_status(user, res, flag_to_set='shareable', flag_value=False)
     elif flag == 'make_shareable':
-       _set_resource_sharing_status(request, user, res, flag_to_set='shareable', flag_value=True)
+        message = _set_resource_sharing_status(user, res, flag_to_set='shareable', flag_value=True)
     elif flag == 'make_require_lic_agreement':
         res.set_require_download_agreement(user, value=True)
     elif flag == 'make_not_require_lic_agreement':
         res.set_require_download_agreement(user, value=False)
+    else:
+        message = "Invalid resource flag"
+    if message is not None:
+        ajax_response_data['message'] = message
+    else:
+        ajax_response_data['status'] = 'success'
 
-    if request.META.get('HTTP_REFERER', None):
-        request.session['resource-mode'] = request.POST.get('resource-mode', 'view')
-        return HttpResponseRedirect(request.META.get('HTTP_REFERER', None))
-
-    return HttpResponse(status=202)
+    return JsonResponse(ajax_response_data)
 
 
 @api_view(['POST'])
 def set_resource_flag_public(request, pk):
     http_request = request._request
     http_request.data = request.data.copy()
-    response = set_resource_flag(http_request, pk)
+    js_response = set_resource_flag(http_request, pk)
+    data = json.loads(js_response.content)
+    if data['status'] == 'error':
+        return HttpResponse(data['message'], status=400)
+    return HttpResponse(status=202)
 
-    messages = get_messages(request)
-    for message in messages:
-        if(message.tags == "error"):
-            return HttpResponse(message, status=400)
-    return response
 
 def share_resource_with_user(request, shortkey, privilege, user_id, *args, **kwargs):
     """this view function is expected to be called by ajax"""
@@ -1121,14 +1172,14 @@ class GroupUpdateForm(GroupForm):
         privacy_level = frm_data['privacy_level']
         self._set_privacy_level(group_to_update, privacy_level)
 
-@processor_for('my-resources')
-@login_required
-def my_resources(request, page):
-
-    resource_collection = get_my_resources_list(request)
-    context = {'collection': resource_collection}
-
-    return context
+# @processor_for('my-resources')
+# @login_required
+# def my_resources(request, page):
+#
+#     resource_collection = get_my_resources_list(request)
+#     context = {'collection': resource_collection}
+#
+#     return context
 
 
 @processor_for(GenericResource)
@@ -1140,14 +1191,28 @@ def add_generic_context(request, page):
         user = forms.ModelChoiceField(User.objects.filter(is_active=True).all(),
                                       widget=autocomplete_light.ChoiceWidget("UserAutocomplete"))
 
+    class AddUserContriForm(forms.Form):
+        user = forms.ModelChoiceField(User.objects.filter(is_active=True).all(),
+                                      widget=autocomplete_light.ChoiceWidget("UserAutocomplete", attrs={'id':'contri'}))
+
+    class AddUserInviteForm(forms.Form):
+        user = forms.ModelChoiceField(User.objects.filter(is_active=True).all(),
+                                      widget=autocomplete_light.ChoiceWidget("UserAutocomplete", attrs={'id':'invite'}))
+
+    class AddUserHSForm(forms.Form):
+        user = forms.ModelChoiceField(User.objects.filter(is_active=True).all(),
+                                      widget=autocomplete_light.ChoiceWidget("UserAutocomplete", attrs={'id':'hs-user'}))
+
     class AddGroupForm(forms.Form):
         group = forms.ModelChoiceField(Group.objects.filter(gaccess__active=True).exclude(name='Hydroshare Author').all(),
                                        widget=autocomplete_light.ChoiceWidget("GroupAutocomplete"))
 
     return {
-        'add_owner_user_form': AddUserForm(),
+        'add_view_contrib_user_form': AddUserContriForm(),
+        'add_view_invite_user_form': AddUserInviteForm(),
+        'add_view_hs_user_form': AddUserHSForm(),
         'add_view_user_form': AddUserForm(),
-        'add_edit_user_form': AddUserForm(),
+        # Reuse the same class AddGroupForm() leads to duplicated IDs. 
         'add_view_group_form': AddGroupForm(),
         'add_edit_group_form': AddGroupForm(),
         'user_zone_account_exist': user_zone_account_exist,
@@ -1660,7 +1725,7 @@ def _unshare_resource_with_users(request, requesting_user, users_to_unshare_with
     return go_to_resource_listing_page
 
 
-def _set_resource_sharing_status(request, user, resource, flag_to_set, flag_value):
+def _set_resource_sharing_status(user, resource, flag_to_set, flag_value):
     """
     Set flags 'public', 'discoverable', 'shareable'
 
@@ -1671,41 +1736,26 @@ def _set_resource_sharing_status(request, user, resource, flag_to_set, flag_valu
     if flag_to_set == 'shareable':  # too simple to deserve a method in AbstractResource
         # access control is separate from validation logic
         if not user.uaccess.can_change_resource_flags(resource):
-            messages.error(request, "You don't have permission to change resource sharing status")
-            return
+            return "You don't have permission to change resource sharing status"
         if resource.raccess.shareable != flag_value:
             resource.raccess.shareable = flag_value
             resource.raccess.save()
-            return
+            return None
 
     elif flag_to_set == 'discoverable':
         try:
             resource.set_discoverable(flag_value, user)  # checks access control
         except ValidationError as v:
-            messages.error(request, v.message)
+            return v.message
 
     elif flag_to_set == 'public':
         try:
             resource.set_public(flag_value, user)  # checks access control
         except ValidationError as v:
-            messages.error(request, v.message)
-
+            return v.message
     else:
-        messages.error(request,
-                       "unrecognized resource flag {}".format(flag_to_set))
-
-
-def _get_message_for_setting_resource_flag(has_files, has_metadata, resource_flag):
-    msg = ''
-    if not has_metadata and not has_files:
-        msg = "Resource does not have sufficient required metadata and content files to be {flag}".format(
-              flag=resource_flag)
-    elif not has_metadata:
-        msg = "Resource does not have sufficient required metadata to be {flag}".format(flag=resource_flag)
-    elif not has_files:
-        msg = "Resource does not have required content files to be {flag}".format(flag=resource_flag)
-
-    return msg
+        return "Unrecognized resource flag {}".format(flag_to_set)
+    return None
 
 
 class MyGroupsView(TemplateView):
@@ -1803,4 +1853,21 @@ class CollaborateView(TemplateView):
         return {
             'profile_user': u,
             'groups': groups,
+        }
+
+
+class MyResourcesView(TemplateView):
+    template_name = 'pages/my-resources.html'
+
+    @method_decorator(login_required)
+    def dispatch(self, *args, **kwargs):
+        return super(MyResourcesView, self).dispatch(*args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        u = User.objects.get(pk=self.request.user.id)
+
+        resource_collection = get_my_resources_list(u)
+
+        return {
+            'collection': resource_collection
         }

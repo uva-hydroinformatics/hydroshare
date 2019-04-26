@@ -3,7 +3,7 @@
 
 {% block extra_css %}
     {{ block.super }}
-    <link rel="stylesheet" href='//cdn.datatables.net/1.10.10/css/jquery.dataTables.min.css'/>
+    <link rel="stylesheet" type="text/css" href="{{ STATIC_URL }}css/jquery.dataTables.min.css">
     <link rel="stylesheet" type="text/css" href="{% static "css/collection.css" %}" />
 {% endblock %}
 
@@ -125,7 +125,7 @@
                 <div>
                     {% for b in cm.bags.all %}
                         <div>
-                            <a id="btn-download-all" type="button" class="btn btn-default row-selector"
+                            <a id="btn-download-all" type="button" class="btn btn-default row-selector space-bottom"
                                href="{{ bag_url }}">
                                     <span class="glyphicon glyphicon-download-alt">
                                         <span title='Download All Content as Zipped BagIt Archive'
@@ -138,7 +138,6 @@
                                 archive format</a>
                         </div>
                     {% endfor %}
-
                 </div>
             {% endblock %}
         </div>
@@ -338,7 +337,7 @@
 
 {% block extra_js %}
     {{ block.super }}
-    <script type="text/javascript" src='//cdn.datatables.net/1.10.10/js/jquery.dataTables.js'></script>
+    <script type="text/javascript" charset="utf8" src="{{ STATIC_URL }}js/jquery.dataTables.js"></script>
 
     {# put resource specific js below #}
 

@@ -12,11 +12,12 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import UploadedFile
 from django.template import Template, Context
 
-from dominate.tags import div, legend, strong, form, select, option, hr, button, input, p, \
+from dominate.tags import div, legend, strong, form, select, option, button, input, p, \
     textarea, span
 
 from hs_core.hydroshare import utils
 from hs_core.models import CoreMetaData
+from hs_core.signals import post_add_timeseries_aggregation
 
 from hs_app_timeseries.models import TimeSeriesMetaDataMixin, AbstractCVLookupTable
 from hs_app_timeseries.forms import SiteValidationForm, VariableValidationForm, \
@@ -94,7 +95,7 @@ class TimeSeriesFileMetaData(TimeSeriesMetaDataMixin, AbstractFileMetaData):
 
         html_string = super(TimeSeriesFileMetaData, self).get_html()
         if self.abstract:
-            abstract_div = div(cls="col-xs-12 content-block")
+            abstract_div = div(cls="content-block")
             with abstract_div:
                 legend("Abstract")
                 p(self.abstract)
@@ -106,33 +107,34 @@ class TimeSeriesFileMetaData(TimeSeriesMetaDataMixin, AbstractFileMetaData):
             html_string += self.temporal_coverage.get_html()
 
         series_selection_div = self.get_series_selection_html(selected_series_id=series_id)
+        legend("Corresponding Metadata")
         with series_selection_div:
-            div_meta_row = div(cls="row")
+            div_meta_row = div(cls='custom-well')
             with div_meta_row:
                 # create 1st column of the row
-                with div(cls="col-md-6 col-xs-12"):
+                with div(cls="content-block"):
                     # generate html for display of site element
                     site = self.get_element_by_series_id(series_id=series_id, elements=self.sites)
                     if site:
-                        legend("Site")
+                        legend("Site", cls='space-top')
                         site.get_html()
 
                     # generate html for variable element
                     variable = self.get_element_by_series_id(series_id=series_id,
                                                              elements=self.variables)
                     if variable:
-                        legend("Variable")
+                        legend("Variable", cls='space-top')
                         variable.get_html()
 
                     # generate html for method element
                     method = self.get_element_by_series_id(series_id=series_id,
                                                            elements=self.methods)
                     if method:
-                        legend("Method")
+                        legend("Method", cls='space-top')
                         method.get_html()
 
                 # create 2nd column of the row
-                with div(cls="col-md-6 col-xs-12"):
+                with div(cls="content-block"):
                     # generate html for processing_level element
                     if self.processing_levels:
                         legend("Processing Level")
@@ -143,7 +145,7 @@ class TimeSeriesFileMetaData(TimeSeriesMetaDataMixin, AbstractFileMetaData):
 
                     # generate html for timeseries_result element
                     if self.time_series_results:
-                        legend("Time Series Result")
+                        legend("Time Series Result", cls='space-top')
                         ts_result = self.get_element_by_series_id(series_id=series_id,
                                                                   elements=self.time_series_results)
                         if ts_result:
@@ -176,8 +178,8 @@ class TimeSeriesFileMetaData(TimeSeriesMetaDataMixin, AbstractFileMetaData):
 
             series_selection_div = self.get_series_selection_html(selected_series_id=series_id)
             with series_selection_div:
-                with div(cls="row"):
-                    with div(cls="col-sm-6 col-xs-12 time-series-forms hs-coordinates-picker",
+                with div(cls='custom-well'):
+                    with div(cls="content-block time-series-forms hs-coordinates-picker",
                              id="site-filetype", data_coordinates_type="point"):
                         with form(id="id-site-file-type", data_coordinates_type='point',
                                   action="{{ site_form.action }}",
@@ -189,7 +191,8 @@ class TimeSeriesFileMetaData(TimeSeriesMetaDataMixin, AbstractFileMetaData):
                                     button("Save changes", type="button",
                                            cls="btn btn-primary pull-right",
                                            style="display: none;")
-                    with div(cls="col-sm-6 col-xs-12 time-series-forms",
+
+                    with div(cls="content-block time-series-forms",
                              id="processinglevel-filetype"):
                         with form(id="id-processinglevel-file-type",
                                   action="{{ processinglevel_form.action }}",
@@ -201,8 +204,8 @@ class TimeSeriesFileMetaData(TimeSeriesMetaDataMixin, AbstractFileMetaData):
                                     button("Save changes", type="button",
                                            cls="btn btn-primary pull-right",
                                            style="display: none;")
-                with div(cls="row"):
-                    with div(cls="col-sm-6 col-xs-12 time-series-forms", id="variable-filetype"):
+
+                    with div(cls="content-block time-series-forms", id="variable-filetype"):
                         with form(id="id-variable-file-type",
                                   action="{{ variable_form.action }}",
                                   method="post", enctype="multipart/form-data"):
@@ -214,7 +217,7 @@ class TimeSeriesFileMetaData(TimeSeriesMetaDataMixin, AbstractFileMetaData):
                                            cls="btn btn-primary pull-right",
                                            style="display: none;")
 
-                    with div(cls="col-sm-6 col-xs-12 time-series-forms",
+                    with div(cls="content-block time-series-forms",
                              id="timeseriesresult-filetype"):
                         with form(id="id-timeseriesresult-file-type",
                                   action="{{ timeseriesresult_form.action }}",
@@ -227,8 +230,7 @@ class TimeSeriesFileMetaData(TimeSeriesMetaDataMixin, AbstractFileMetaData):
                                            cls="btn btn-primary pull-right",
                                            style="display: none;")
 
-                with div(cls="row"):
-                    with div(cls="col-sm-6 col-xs-12 time-series-forms", id="method-filetype"):
+                    with div(cls="content-block time-series-forms", id="method-filetype"):
                         with form(id="id-method-file-type",
                                   action="{{ method_form.action }}",
                                   method="post", enctype="multipart/form-data"):
@@ -240,7 +242,7 @@ class TimeSeriesFileMetaData(TimeSeriesMetaDataMixin, AbstractFileMetaData):
                                            cls="btn btn-primary pull-right",
                                            style="display: none;")
                     if self.logical_file.has_csv_file:
-                        with div(cls="col-sm-6 col-xs-12 time-series-forms",
+                        with div(cls="content-block time-series-forms",
                                  id="utcoffset-filetype"):
                             with form(id="id-utcoffset-file-type",
                                       action="{{ utcoffset_form.action }}",
@@ -271,8 +273,7 @@ class TimeSeriesFileMetaData(TimeSeriesMetaDataMixin, AbstractFileMetaData):
         """Generates html needed to display series selection dropdown box and the
         associated form"""
 
-        root_div = div(id="div-series-selection-file_type", cls="content-block col-xs-12 col-sm-12",
-                       style="margin-top:10px;")
+        root_div = div(id="div-series-selection-file_type", cls="content-block")
         heading = "Select a timeseries to see corresponding metadata (Number of time series:{})"
         if self.series_names:
             time_series_count = len(self.series_names)
@@ -280,7 +281,8 @@ class TimeSeriesFileMetaData(TimeSeriesMetaDataMixin, AbstractFileMetaData):
             time_series_count = self.time_series_results.count()
         heading = heading.format(str(time_series_count))
         with root_div:
-            strong(heading)
+            legend("Corresponding Metadata")
+            span(heading)
             action_url = "/hsapi/_internal/{logical_file_id}/series_id/resource_mode/"
             action_url += "get-timeseries-file-metadata/"
             action_url = action_url.format(logical_file_id=self.logical_file.id)
@@ -293,11 +295,10 @@ class TimeSeriesFileMetaData(TimeSeriesMetaDataMixin, AbstractFileMetaData):
                             option(display_text, value=series_id, selected="selected", title=label)
                         else:
                             option(display_text, value=series_id, title=label)
-            hr()
         return root_div
 
     def get_update_sqlite_file_html_form(self):
-        form_action = "/hsapi/_internal/{}/update-sqlite-file/".format(self.id)
+        form_action = "/hsapi/_internal/{}/update-sqlite-file/".format(self.logical_file.id)
         style = "display:none;"
         is_dirty = 'False'
         can_update_sqlite_file = 'False'
@@ -331,7 +332,7 @@ class TimeSeriesFileMetaData(TimeSeriesMetaDataMixin, AbstractFileMetaData):
     def get_abstract_form(self):
         form_action = "/hsapi/_internal/{}/update-timeseries-abstract/"
         form_action = form_action.format(self.logical_file.id)
-        root_div = div(cls="col-xs-12")
+        root_div = div(cls="content-block")
         if self.abstract:
             abstract = self.abstract
         else:
@@ -469,14 +470,14 @@ class TimeSeriesLogicalFile(AbstractLogicalFile):
     @property
     def has_sqlite_file(self):
         for res_file in self.files.all():
-            if res_file.extension == '.sqlite':
+            if res_file.extension.lower() == '.sqlite':
                 return True
         return False
 
     @property
     def has_csv_file(self):
         for res_file in self.files.all():
-            if res_file.extension == '.csv':
+            if res_file.extension.lower() == '.csv':
                 return True
         return False
 
@@ -503,7 +504,7 @@ class TimeSeriesLogicalFile(AbstractLogicalFile):
         # get sqlite resource file
         sqlite_file_to_update = None
         for res_file in self.files.all():
-            if res_file.extension == '.sqlite':
+            if res_file.extension.lower() == '.sqlite':
                 sqlite_file_to_update = res_file
                 break
         if sqlite_file_to_update is None:
@@ -522,7 +523,7 @@ class TimeSeriesLogicalFile(AbstractLogicalFile):
             # no files or more than 1 file
             return ""
 
-        if files[0].extension not in cls.get_allowed_uploaded_file_types():
+        if files[0].extension.lower() not in cls.get_allowed_uploaded_file_types():
             return ""
 
         return cls.__name__
@@ -540,7 +541,7 @@ class TimeSeriesLogicalFile(AbstractLogicalFile):
         temp_res_file = utils.get_file_from_irods(res_file)
         # hold on to temp dir for final clean up
         temp_dir = os.path.dirname(temp_res_file)
-        if res_file.extension == '.sqlite':
+        if res_file.extension.lower() == '.sqlite':
             validate_err_message = validate_odm2_db_file(temp_res_file)
         else:
             # file must be a csv file
@@ -630,6 +631,11 @@ class TimeSeriesLogicalFile(AbstractLogicalFile):
                                        reset_title=reset_title)
 
                 file_type_success = True
+                post_add_timeseries_aggregation.send(
+                    sender=AbstractLogicalFile,
+                    resource=resource,
+                    file=logical_file
+                )
             except Exception as ex:
                 msg = msg.format(ex.message)
                 log.exception(msg)
@@ -846,6 +852,8 @@ def validate_csv_file(csv_file_path):
             return err_message
 
         # process data rows
+        date_data_error = False
+        data_row_count = 0
         for row in csv_reader:
             # check that data row has the same number of columns as the header
             if len(row) != len(header):
@@ -854,8 +862,17 @@ def validate_csv_file(csv_file_path):
                 return err_message
             # check that the first column data is of type datetime
             try:
-                parser.parse(row[0])
-            except Exception:
+                # some numeric values (e.g., 20080101, 1.602652223413681) are recognized by the
+                # the parser as valid date value - we don't allow any such value as valid date
+                float(row[0])
+                date_data_error = True
+            except ValueError:
+                try:
+                    parser.parse(row[0])
+                except ValueError:
+                    date_data_error = True
+
+            if date_data_error:
                 err_message += " Data for the first column must be a date value."
                 log.error(err_message)
                 return err_message
@@ -868,6 +885,12 @@ def validate_csv_file(csv_file_path):
                     err_message += " Data values must be numeric."
                     log.error(err_message)
                     return err_message
+            data_row_count += 1
+
+        if data_row_count < 2:
+            err_message += " There needs to be at least two rows of data."
+            log.error(err_message)
+            return err_message
 
     return None
 
@@ -1190,7 +1213,7 @@ def extract_cv_metadata_from_blank_sqlite_file(target):
     # find the csv file
     csv_res_file = None
     for f in target.files.all():
-        if f.extension == ".csv":
+        if f.extension.lower() == ".csv":
             csv_res_file = f
             break
     if csv_res_file is None:
@@ -1745,6 +1768,7 @@ def sqlite_file_update(instance, sqlite_res_file, user):
     :param  instance: an instance of either TimeSeriesLogicalFile or TimeSeriesResource
     """
 
+    instance.metadata.refresh_from_db()
     if not instance.metadata.is_dirty:
         return
     is_file_type = isinstance(instance, TimeSeriesLogicalFile)

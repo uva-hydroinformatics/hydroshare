@@ -36,7 +36,7 @@ function label_ajax_submit() {
                     {
                         $("#btnOpenWithApp").removeClass("btn-resource-add");
                         $("#btnOpenWithApp").addClass("btn-resource-remove");
-                        $("#btnOpenWithApp").attr("data-original-title", "Remove WebApp from OpenWith list");
+                        $("#btnOpenWithApp").attr("data-original-title", "Remove WebApp from 'Open With' list");
                     }
                 }
                 else
@@ -51,7 +51,7 @@ function label_ajax_submit() {
                     {
                          $("#btnOpenWithApp").addClass("btn-resource-add");
                          $("#btnOpenWithApp").removeClass("btn-resource-remove");
-                         $("#btnOpenWithApp").attr("data-original-title", "Add WebApp to OpenWith list");
+                         $("#btnOpenWithApp").attr("data-original-title", "Add WebApp to 'Open With' list");
                     }
                 }
                 $("#btnMyResources").tooltip('show')
@@ -65,26 +65,85 @@ function label_ajax_submit() {
     return false;
 }
 
-function shareable_ajax_submit(event) {
-    var form = $(this).closest("form");
-    var datastring = form.serialize();
-    var url = form.attr('action');
-    var element = $(this);
-    var action = $(this).closest("form").find("input[name='t']").val();
-    element.attr("disabled", true);
+function change_access_ajax_submit() {
+    let form = $(this).closest("form");
+    let element = $(this);  // The access button that was pressed
+    form.find("input[name='flag']").val(element.attr("data-flag").trim());
+
+    // Disable buttons while request is being made
+    form.find("button").toggleClass("disabled", true);
+    form.css("cursor", "progress");
+
+    let datastring = form.serialize();
+    let url = form.attr('action');
 
     $.ajax({
         type: "POST",
         url: url,
         dataType: 'html',
         data: datastring,
-        success: function () {
-            element.attr("disabled", false);
-            if (action == "make_not_shareable") {
-                element.closest("form").find("input[name='t']").val("make_shareable");
+        success: function (result) {
+            var json_response = JSON.parse(result);
+            if (json_response.status === 'success') {
+                form.find("button").removeAttr("disabled");
+                form.find("button").removeClass("active");
+                element.toggleClass("active", true);
+                element.attr("disabled", true);
+            }
+            form.find("button").toggleClass("disabled", false);
+            form.css("cursor", "auto");
+
+            // Enable Publish Resource button if the resource was made public
+            const isPublic = element.attr("id") === "btn-public";
+            $("#publish").toggleClass("disabled", !isPublic);
+            $("#publish > span").attr("data-original-title", !isPublic ? "Publish this resource<br><br><small>You must make your resource public in the Manage Access Panel before it can be published." : "Publish this resource");
+            $("#publish").attr("data-toggle", !isPublic ? "" : "modal");   // Disable the agreement modal
+            $("#hl-sharing-status").text(element.text().trim());    // Update highlight sharing status
+        },
+        error: function () {
+            form.find("button").toggleClass("disabled", false);
+            form.css("cursor", "auto");
+        }
+    });
+
+    return false;   //don't submit the form
+}
+
+function shareable_ajax_submit(event) {
+    var form = $(this).closest("form");
+    var datastring = form.serialize();
+    var url = form.attr('action');
+    var element = $(this);
+    var action = $(this).closest("form").find("input[name='t']").val();
+
+    element.attr("disabled", true);
+
+    if (element.prop("checked")) {
+        $("#shareable-description").text("Uncheck the box to prevent others from sharing the resource without the owner's permission.");
+    }
+    else {
+        $("#shareable-description").text("Check this box to allow others to share the resource without the owner's permission.");
+    }
+
+    $.ajax({
+        type: "POST",
+        url: url,
+        dataType: 'html',
+        data: datastring,
+        success: function (result) {
+            var json_response = JSON.parse(result);
+            if (json_response.status === 'success') {
+                element.attr("disabled", false);
+                if (action === "make_not_shareable") {
+                    element.closest("form").find("input[name='t']").val("make_shareable");
+                }
+                else {
+                    element.closest("form").find("input[name='t']").val("make_not_shareable");
+                }
             }
             else {
-                element.closest("form").find("input[name='t']").val("make_not_shareable");
+                element.attr("disabled", false);
+                element.closest("form").append("<span class='label label-danger'><strong>Error: </strong>" + json_response.message + "</span>")
             }
         },
         error: function () {
@@ -110,17 +169,30 @@ function license_agreement_ajax_submit(event) {
         url: url,
         dataType: 'html',
         data: datastring,
-        success: function () {
-            element.attr("disabled", false);
-            if (action == "make_not_require_lic_agreement") {
-                element.closest("form").find("input[name='flag']").val("make_require_lic_agreement");
+        success: function (result) {
+            var json_response = JSON.parse(result);
+            if (json_response.status === 'success') {
+                element.attr("disabled", false);
+                if (action === "make_not_require_lic_agreement") {
+                    element.closest("form").find("input[name='flag']").val("make_require_lic_agreement");
+                    $("#hs-file-browser").attr("data-agreement", "false");
+                    $("#btn-download-all").attr("href", $("#download-bag-btn").attr("href"));
+                    $("#btn-download-all").removeAttr("data-toggle");
+
+                }
+                else {
+                    element.closest("form").find("input[name='flag']").val("make_not_require_lic_agreement");
+                    $("#hs-file-browser").attr("data-agreement", "true");
+                    $("#btn-download-all").removeAttr("href");
+                    $("#btn-download-all").attr("data-toggle", "modal");
+                    $("#btn-download-all").attr("data-target", "#license-agree-dialog-bag");
+                    $("#btn-download-all").attr("data-placement", "auto");
+                }
             }
             else {
-                element.closest("form").find("input[name='flag']").val("make_not_require_lic_agreement");
+                element.attr("disabled", false);
+                element.closest("form").append("<span class='label label-danger'><strong>Error: </strong>" + json_response.message + "</span>")
             }
-            // page refresh is needed to update if license agreement popup to show or not prior
-            // to download of files/bag
-            window.location = window.location.href;
         },
         error: function () {
             element.attr("disabled", false);
@@ -218,23 +290,23 @@ function undo_share_ajax_submit(form_id) {
                 return;
             }
 
-            if (json_response.status == "success") {
+            if (json_response.status === "success") {
                 // Set the new permission level in the interface
                 var userRoles = $form.closest("tr").find(".user-roles");
 
                 userRoles.find("li").removeClass("active");
 
-                if (json_response.undo_user_privilege == "view" || json_response.undo_group_privilege == "view") {
+                if (json_response.undo_user_privilege === "view" || json_response.undo_group_privilege === "view") {
                     userRoles.find(".dropdown-toggle").text("Can view");
                     userRoles.find("li[data-access-type='" + "Can view"
                         + "']").addClass("active");
                 }
-                else if (json_response.undo_user_privilege == "change" || json_response.undo_group_privilege == "change") {
+                else if (json_response.undo_user_privilege === "change" || json_response.undo_group_privilege === "change") {
                     userRoles.find(".dropdown-toggle").text("Can edit");
                     userRoles.find("li[data-access-type='" + "Can edit"
                         + "']").addClass("active");
                 }
-                else if (json_response.undo_user_privilege == "owner" || json_response.undo_group_privilege == "owner") {
+                else if (json_response.undo_user_privilege === "owner" || json_response.undo_group_privilege === "owner") {
                     userRoles.find(".dropdown-toggle").text("Is owner");
                     userRoles.find("li[data-access-type='" + "Is owner"
                         + "']").addClass("active");
@@ -292,7 +364,7 @@ function promptSelfRemovingAccess(form_id){
     var url = $form.attr('action');
     // check if we are unsharing a user or a group
     var isUserUnsharing = false;
-    if(url.indexOf("unshare-resource-with-user") > 0){
+    if (url.indexOf("unshare-resource-with-user") > 0) {
         isUserUnsharing = true;
     }
     if(!isUserUnsharing){
@@ -307,7 +379,7 @@ function promptSelfRemovingAccess(form_id){
     }
 
     // close the manage access panel (modal)
-    $("#manage-access .btn-primary").click();
+    $("#manage-access ").modal("hide");
 
     // display remove access confirmation dialog
     $("#dialog-confirm-delete-self-access").dialog({
@@ -335,13 +407,73 @@ function promptSelfRemovingAccess(form_id){
                 .addClass("btn btn-default");
 
             $(this).closest(".ui-dialog")
+                .find(".ui-dialog-buttonset button:nth-child(2)") // the second button
+                .addClass("btn btn-danger");
+        }
+    });
+}
+
+function promptChangeSharePermission(form_id){
+    // close the manage access panel (modal)
+    $("#manage-access").modal('hide');
+
+    // display change share permission confirmation dialog
+    $("#dialog-confirm-change-share-permission").dialog({
+        resizable: false,
+        draggable: false,
+        height: "auto",
+        width: 500,
+        modal: true,
+        dialogClass: 'noclose',
+        buttons: {
+            Cancel: function () {
+                $(this).dialog("close");
+		// show manage access control panel again
+		$("#manage-access").modal('show');
+            },
+            "Confirm": function () {
+                $(this).dialog("close");
+                change_share_permission_ajax_submit(form_id, false);
+		$("#manage-access").modal('show');
+            }
+        },
+	open: function () {
+            $(this).closest(".ui-dialog")
+                .find(".ui-dialog-buttonset button:first") // the first button
+                .addClass("btn btn-default");
+
+            $(this).closest(".ui-dialog")
                 .find(".ui-dialog-buttonset button:nth-child(2)") // the first button
                 .addClass("btn btn-danger");
         }
     });
 }
 
-function change_share_permission_ajax_submit(form_id) {
+function isSharePermissionPromptRequired(form_id) {
+    const REQUIRED = true;
+    const NOT_REQUIRED = false;
+
+    let formIDParts = form_id.split('-');
+    let userID = parseInt(formIDParts[formIDParts.length -1]);
+    let currentUserID = parseInt($("#current-user-id").val());
+
+    let $form = $('#' + form_id);
+    let previousAccess = $form.closest(".dropdown-menu").find("li.active").attr("data-access-type");
+    let clickedAccess = $form.closest("form").attr("data-access-type");
+
+    if (currentUserID == userID 
+        && previousAccess == "Is owner" 
+	&& previousAccess != clickedAccess){
+         return REQUIRED;
+    }
+    return NOT_REQUIRED;
+}
+function change_share_permission_ajax_submit(form_id, check_permission=true) {
+    if (check_permission && isSharePermissionPromptRequired(form_id)) {
+	promptChangeSharePermission(form_id);
+	return;
+    }
+
     $form = $('#' + form_id);
     var datastring = $form.serialize();
     var url = $form.attr('action');
@@ -402,15 +534,61 @@ function change_share_permission_ajax_submit(form_id) {
     });
 }
 
+function isUserInvited(userID) { 
+    const INVITED = true;
+    const NOT_INVITED = false;
+ 
+    if (userID < 1) {
+       /* invalid user, treat invalid user as not invited */
+       return NOT_INVITED;
+    } 
+
+    /* found a matching entry */
+    if($(".access-table #row-id-" + userID).length > 0) {
+        return INVITED;
+    } 
+    
+    return NOT_INVITED;
+}
+
+/* get the user id  that is already populated in the invitee text field */
+function getUserIDIntendToInvite() {
+    let share_with = -1;
+    if ($("#div-invite-people button[data-value='users']").hasClass("btn-primary")) {
+        if ($("#id_user-deck > .hilight").length > 0) {
+            share_with = parseInt($("#id_user-deck > .hilight")[0].getAttribute("data-value"));
+        }
+    }
+
+    return share_with;
+}
+
+/*return the current login user. */
+function getCurrentUser() {
+    return parseInt($("#current-user-id").val());
+}
+
+function promptUserInShareList() {
+    let errorMsg = "The user selected already has access. To change, adjust the setting next to the user in the who has access panel.";
+    $("#div-invite-people").find(".label-danger").remove(); // Remove previous alerts
+    $("#div-invite-people").append("<div class='label-danger label-block'><p><strong>Error: </strong>" + errorMsg + "</p></div>");
+
+}
+
 function share_resource_ajax_submit(form_id) {
+    if(isUserInvited(getUserIDIntendToInvite())) {
+	promptUserInShareList();
+        return;
+    }
+
     $form = $('#' + form_id);
     var datastring = $form.serialize();
     var share_with;
     var shareType;
 
     if ($("#div-invite-people button[data-value='users']").hasClass("btn-primary")) {
-        if ($("#id_user-deck > .hilight").length > 0) {
-            share_with = $("#id_user-deck > .hilight")[0].getAttribute("data-value");
+        if ($("#user-deck > .hilight").length > 0) {
+            share_with = $("#user-deck > .hilight")[0].getAttribute("data-value");
             shareType = "user";
         }
         else {
@@ -567,12 +745,12 @@ function share_resource_ajax_submit(form_id) {
 }
 
 function metadata_update_ajax_submit(form_id){
-    $alert_success = '<div class="alert alert-success" id="success-alert"> \
+    let $alert_success = '<div class="alert alert-success" id="success-alert"> \
         <button type="button" class="close" data-dismiss="alert">x</button> \
         <strong>Success! </strong> \
         Metadata updated.\
     </div>';
-    $alert_error = '<div class="alert alert-danger" id="error-alert"> \
+    let $alert_error = '<div class="alert alert-danger" id="error-alert"> \
         <button type="button" class="close" data-dismiss="alert">x</button> \
         <strong>Error! </strong> \
         Metadata failed to update.\
@@ -583,8 +761,14 @@ function metadata_update_ajax_submit(form_id){
     }
     var flagAsync = (form_id == "id-subject" ? false : true);   // Run keyword related changes synchronously to prevent integrity error
     var resourceType = $("#resource-type").val();
-    $form = $('#' + form_id);
+    let $form = $('#' + form_id);
     var datastring = $form.serialize();
+
+    // Disable button while request is being made
+    var defaultBtnText = $form.find(".btn-form-submit").text();
+    $form.find(".btn-form-submit").text("Saving changes...");
+    $form.find(".btn-form-submit").addClass("disabled");
+
     $.ajax({
         type: "POST",
         url: $form.attr('action'),
@@ -595,8 +779,7 @@ function metadata_update_ajax_submit(form_id){
             /* The div contains now the updated form */
             //$('#' + form_id).html(result);
             json_response = JSON.parse(result);
-            if (json_response.status === 'success')
-            {
+            if (json_response.status === 'success') {
                 // show update netcdf file update option for NetCDFLogicalFile
                 if (json_response.logical_file_type === "NetCDFLogicalFile"){
                     $("#div-netcdf-file-update").show();
@@ -707,70 +890,17 @@ function metadata_update_ajax_submit(form_id){
                         $res_title.text(updated_title);
                     }
                 }
-                if (json_response.hasOwnProperty('metadata_status')) {
-                    if (json_response.metadata_status !== $('#metadata-status').text()) {
-                        $('#metadata-status').text(json_response.metadata_status);
-                        if (json_response.metadata_status.toLowerCase().indexOf("insufficient") == -1) {
-                            if(resourceType != 'Web App Resource')
-                                promptMessage = "This resource can be published or made public.";
-                            else
-                                promptMessage = "This resource can be made public.";
-                            if (!metadata_update_ajax_submit.resourceSatusDisplayed){
-                                metadata_update_ajax_submit.resourceSatusDisplayed = true;
-                                if (json_response.hasOwnProperty('res_public_status')) {
-                                    if (json_response.res_public_status.toLowerCase() === "not public") {
-                                        // if the resource is already public no need to show the following alert message
-                                        customAlert("Resource Status:", promptMessage, "success", 3000);
-                                    }
-                                }
-                                else {
-                                    customAlert("Resource Status:", promptMessage, "success", 3000);
-                                }
-                            }
-                            $("#missing-metadata-or-file:not(.persistent)").fadeOut();
-                            $("#missing-metadata-file-type:not(.persistent)").fadeOut();
-                        }
-                    }
-                }
-                if (json_response.hasOwnProperty('res_public_status') && json_response.hasOwnProperty('res_discoverable_status')) {
-                    if (json_response.res_public_status == "public"){
-                        if (!$("#btn-public").hasClass('active')){
-                            $("#btn-public").prop("disabled", false);
-                        }
-                    }
-                    else {
-                        $("#btn-public").removeClass('active');
-                        $("#btn-public").prop("disabled", true);
-                    }
-                    if (json_response.res_discoverable_status == "discoverable"){
-                        if (!$("#btn-discoverable").hasClass('active')){
-                            $("#btn-discoverable").prop("disabled", false);
-                        }
-                    }
-                    else {
-                        $("#btn-discoverable").removeClass('active');
-                        $("#btn-discoverable").prop("disabled", true);
-                    }
-                    if (json_response.res_public_status !== "public" && json_response.res_discoverable_status !== "discoverable"){
-                        $("#btn-private").addClass('active');
-                        $("#btn-private").prop("disabled", true);
-                    }
-                    if (json_response.metadata_status.toLowerCase().indexOf("insufficient") == -1) {
-                        if (!$("#btn-public").hasClass('active')){
-                            $("#btn-public").prop("disabled", false);
-                        }
-                        if (!$("#btn-discoverable").hasClass('active')){
-                            $("#btn-discoverable").prop("disabled", false);
-                        }
-                    }
-                }
-                $('body > .container').append($alert_success);
+
+                showCompletedMessage(json_response);
+
+
+                $('body > .main-container > .container').append($alert_success);
                 $('#error-alert').each(function(){
                     this.remove();
                 });
-                $(".alert-success").fadeTo(2000, 500).fadeOut(1000, function(){
+                $("#success-alert").fadeTo(2000, 500).fadeOut(1000, function(){
                     $(document).trigger("submit-success");
-                    $(".alert-success").alert('close');
+                    $("#success-alert").alert('close');
                 });
             }
             else{
@@ -780,17 +910,93 @@ function metadata_update_ajax_submit(form_id){
                     $(".alert-error").alert('close');
                 });
             }
+
+            // Restore button
+            $form.find(".btn-form-submit").text(defaultBtnText);
+            $form.find(".btn-form-submit").removeClass("disabled");
         },
-        error: function(XMLHttpRequest, textStatus, errorThrown)
-        {
+        error: function(XMLHttpRequest, textStatus, errorThrown) {
             $('#' + form_id).before($alert_error);
             $(".alert-error").fadeTo(2000, 500).slideUp(1000, function(){
                 $(".alert-error").alert('close');
             });
+
+            // Restore button
+            $form.find(".btn-form-submit").text(defaultBtnText);
+            $form.find(".btn-form-submit").removeClass("disabled");
         }
     });
     //don't submit the form
     return false;
+}
+
+function showCompletedMessage(json_response) {
+    if (json_response.hasOwnProperty('metadata_status')) {
+        if (json_response.metadata_status !== $('#metadata-status').text()) {
+            $('#metadata-status').text(json_response.metadata_status);
+            if (json_response.metadata_status.toLowerCase().indexOf("insufficient") == -1) {
+                let resourceType = $("#resource-type").val();
+                let promptMessage = "";
+                if (resourceType != 'Web App Resource' && resourceType != 'Collection Resource')
+                    promptMessage = "All required fields are completed. The resource can now be made discoverable " +
+                      "or public. To permanently publish the resource and obtain a DOI, the resource " +
+                      "must first be made public.";
+                else
+                    promptMessage = "All required fields are completed. The resource can now be made discoverable " +
+                      "or public.";
+                if (!metadata_update_ajax_submit.resourceSatusDisplayed) {
+                    metadata_update_ajax_submit.resourceSatusDisplayed = true;
+                    if (json_response.hasOwnProperty('res_public_status')) {
+                        if (json_response.res_public_status.toLowerCase() === "not public") {
+                            // if the resource is already public no need to show the following alert message
+                            customAlert("Resource Status:", promptMessage, "success", 8000);
+                        }
+                    }
+                    else {
+                        customAlert("Resource Status:", promptMessage, "success", 8000);
+                    }
+                }
+                $("#missing-metadata-or-file:not(.persistent)").fadeOut();
+                $("#missing-metadata-file-type:not(.persistent)").fadeOut();
+            }
+        }
+    }
+
+    if (json_response.hasOwnProperty('res_public_status') && json_response.hasOwnProperty('res_discoverable_status')) {
+        if (json_response.res_public_status == "public") {
+            if (!$("#btn-public").hasClass('active')) {
+                $("#btn-public").prop("disabled", false);
+            }
+        }
+        else {
+            $("#btn-public").removeClass('active');
+            $("#btn-public").prop("disabled", true);
+        }
+
+        if (json_response.res_discoverable_status == "discoverable") {
+            if (!$("#btn-discoverable").hasClass('active')) {
+                $("#btn-discoverable").prop("disabled", false);
+            }
+        }
+        else {
+            $("#btn-discoverable").removeClass('active');
+            $("#btn-discoverable").prop("disabled", true);
+        }
+
+        if (json_response.res_public_status !== "public" && json_response.res_discoverable_status !== "discoverable") {
+            $("#btn-private").addClass('active');
+            $("#btn-private").prop("disabled", true);
+        }
+
+        if (json_response.metadata_status.toLowerCase().indexOf("insufficient") == -1) {
+            if (!$("#btn-public").hasClass('active')) {
+                $("#btn-public").prop("disabled", false);
+            }
+            if (!$("#btn-discoverable").hasClass('active')) {
+                $("#btn-discoverable").prop("disabled", false);
+            }
+        }
+    }
 }
 
 function makeTimeSeriesMetaDataElementFormReadOnly(form_id, element_id){
@@ -801,7 +1007,7 @@ function makeTimeSeriesMetaDataElementFormReadOnly(form_id, element_id){
 }
 
 function set_file_type_ajax_submit(url, folder_path) {
-    var $alert_success = '<div class="alert alert-success" id="error-alert"> \
+    var $alert_success = '<div class="alert alert-success" id="success-alert"> \
         <button type="button" class="close" data-dismiss="alert">x</button> \
         <strong>Success! </strong> \
         Selected content type creation was successful.\
@@ -818,12 +1024,9 @@ function set_file_type_ajax_submit(url, folder_path) {
         },
         success: function (result) {
             waitDialog.dialog("close");
-            var json_response = JSON.parse(result);
-            var spatialCoverage = json_response.spatial_coverage;
-            updateResourceSpatialCoverage(spatialCoverage);
             $("#fb-inner-controls").before($alert_success);
-            $(".alert-success").fadeTo(2000, 500).slideUp(1000, function(){
-                $(".alert-success").alert('close');
+            $("#success-alert").fadeTo(2000, 500).slideUp(1000, function(){
+                $("#success-alert").alert('close');
             });
         },
         error: function (xhr, textStatus, errorThrown) {
@@ -836,7 +1039,7 @@ function set_file_type_ajax_submit(url, folder_path) {
 }
 
 function remove_aggregation_ajax_submit(url) {
-    var $alert_success = '<div class="alert alert-success" id="error-alert"> \
+    var $alert_success = '<div class="alert alert-success" id="success-alert"> \
         <button type="button" class="close" data-dismiss="alert">x</button> \
         <strong>Success! </strong> \
         Content type was removed successfully.\
@@ -851,12 +1054,9 @@ function remove_aggregation_ajax_submit(url) {
         async: true,
         success: function (result) {
             waitDialog.dialog("close");
-            var json_response = JSON.parse(result);
-            var spatialCoverage = json_response.spatial_coverage;
-            updateResourceSpatialCoverage(spatialCoverage);
             $("#fb-inner-controls").before($alert_success);
-            $(".alert-success").fadeTo(2000, 500).slideUp(1000, function(){
-                $(".alert-success").alert('close');
+            $("#success-alert").fadeTo(2000, 500).slideUp(1000, function () {
+                $("#success-alert").alert('close');
             });
         },
         error: function (xhr, textStatus, errorThrown) {
@@ -864,6 +1064,21 @@ function remove_aggregation_ajax_submit(url) {
             var jsonResponse = JSON.parse(xhr.responseText);
             display_error_message('Failed to remove aggregation', jsonResponse.message);
             $(".file-browser-container, #fb-files-container").css("cursor", "auto");
+        }
+    });
+}
+
+function getResourceMetadata() {
+    const res_id = $("#short-id").val();
+    return $.ajax({
+        type: "POST",
+        url: '/hsapi/_internal/' + res_id + '/get-metadata/',
+        dataType: 'html',
+        async: false,
+        success: function (result) {
+        },
+        error: function (XMLHttpRequest, textStatus, errorThrown) {
+            console.log(XMLHttpRequest, textStatus, errorThrown);
         }
     });
 }
@@ -882,7 +1097,13 @@ function get_file_type_metadata_ajax_submit(url) {
 }
 
 function filetype_keywords_update_ajax_submit() {
+    $("#btn-add-keyword-filetype").toggleClass("disabled", true);    // Disable button during ajax
     $form = $('#id-keywords-filetype');
+    // Data pre processing: trim keywords
+    let subjects = $("#txt-keyword-filetype").val().split(",").map(function (d) {
+        return d.trim()
+    }).join(",");
+    $("#txt-keyword-filetype").val(subjects);
     var datastring = $form.serialize();
     $.ajax({
         type: "POST",
@@ -918,6 +1139,7 @@ function filetype_keywords_update_ajax_submit() {
                     $("#div-netcdf-file-update").show();
                 }
             }
+            $("#btn-add-keyword-filetype").toggleClass("disabled", false);
         }
     });
 }
@@ -945,7 +1167,7 @@ function filetype_keyword_delete_ajax_submit(keyword, tag) {
 }
 
 function update_netcdf_file_ajax_submit() {
-    var $alert_success = '<div class="alert alert-success" id="error-alert"> \
+    var $alert_success = '<div class="alert alert-success" id="success-alert"> \
         <button type="button" class="close" data-dismiss="alert">x</button> \
         <strong>Success! </strong> \
         File update was successful.\
@@ -962,8 +1184,8 @@ function update_netcdf_file_ajax_submit() {
                 $("#div-netcdf-file-update").hide();
                 $alert_success = $alert_success.replace("File update was successful.", json_response.message);
                 $("#fb-inner-controls").before($alert_success);
-                $(".alert-success").fadeTo(2000, 500).slideUp(1000, function(){
-                    $(".alert-success").alert('close');
+                $("#success-alert").fadeTo(2000, 500).slideUp(1000, function () {
+                    $("#success-alert").alert('close');
                 });
                 // refetch file metadata to show the updated header file info
                  showFileTypeMetadata(false, "");
@@ -976,7 +1198,7 @@ function update_netcdf_file_ajax_submit() {
 }
 
 function update_sqlite_file_ajax_submit() {
-    var $alert_success = '<div class="alert alert-success" id="error-alert"> \
+    var $alert_success = '<div class="alert alert-success" id="success-alert"> \
         <button type="button" class="close" data-dismiss="alert">x</button> \
         <strong>Success! </strong> \
         File update was successful.\
@@ -993,8 +1215,8 @@ function update_sqlite_file_ajax_submit() {
                 $("#div-sqlite-file-update").hide();
                 $alert_success = $alert_success.replace("File update was successful.", json_response.message);
                 $("#fb-inner-controls").before($alert_success);
-                $(".alert-success").fadeTo(2000, 500).slideUp(1000, function(){
-                    $(".alert-success").alert('close');
+                $("#success-alert").fadeTo(2000, 500).slideUp(1000, function () {
+                    $("#success-alert").alert('close');
                 });
                 // refetch file metadata to show the updated header file info
                 showFileTypeMetadata(false, "");
@@ -1008,13 +1230,13 @@ function update_sqlite_file_ajax_submit() {
 
 function get_user_info_ajax_submit(url, obj) {
     var is_group = false;
-    var entry = $(obj).closest("div[data-hs-user-type]").find("#id_user-deck > .hilight");
+    var entry = $(obj).closest("div[data-hs-user-type]").find("#user-deck > .hilight");
     if (entry.length < 1) {
         entry = $(obj).parent().parent().parent().parent().find("#id_group-deck > .hilight");
         is_group = true;
     }
     if (entry.length < 1) {
-        return;
+        return false;
     }
 
     var userID = entry[0].getAttribute("data-value");
@@ -1060,6 +1282,8 @@ function get_user_info_ajax_submit(url, obj) {
 
         }
     });
+
+    return true;
 }
 
 function display_error_message(title, err_msg) {
@@ -1115,7 +1339,6 @@ function get_irods_folder_struct_ajax_submit(res_id, store_path) {
             var folders = result.folders;
             var can_be_public = result.can_be_public;
             const mode = $("#hs-file-browser").attr("data-mode");
-
             $('#fb-files-container').empty();
             if (files.length > 0) {
                 $.each(files, function(i, v) {
@@ -1132,7 +1355,22 @@ function get_irods_folder_struct_ajax_submit(res_id, store_path) {
                 });
             }
             if (!files.length && !folders.length) {
-                $('#fb-files-container').append('<span class="text-muted">This directory is empty</span>');
+                if (mode == "edit") {
+                    $('#fb-files-container').append(
+                        '<div>' +
+                            '<span class="text-muted fb-empty-dir space-bottom">This directory is empty</span>' +
+                            '<div class="hs-upload-indicator text-center">' +
+                                '<i class="fa fa-file" aria-hidden="true"></i>' +
+                                '<h4>Drop files here or click "Add files" to upload</h4>' +
+                            '</div>' +
+                        '</div>'
+                    );
+                }
+                else {
+                    $('#fb-files-container').append(
+                        '<span class="text-muted fb-empty-dir">This directory is empty</span>'
+                    );
+                }
             }
             if (can_be_public) {
                 $("#missing-metadata-or-file:not(.persistent)").fadeOut();
@@ -1142,11 +1380,11 @@ function get_irods_folder_struct_ajax_submit(res_id, store_path) {
             bindFileBrowserItemEvents();
 
             $("#hs-file-browser").attr("data-current-path", store_path);
-            $("#upload-folder-path").text(store_path);
+            $("#upload-folder-path").text(store_path); // We don't show the data folder in the UI path
             $("#hs-file-browser").attr("data-res-id", res_id);
 
             // strip the 'data' folder from the path
-            setBreadCrumbs(store_path.replace("data/", ""));
+            setBreadCrumbs(store_path);
 
             if ($("#hsDropzone").hasClass("dropzone")) {
                 // If no multiple files allowed and a file already exists, disable upload
@@ -1154,15 +1392,20 @@ function get_irods_folder_struct_ajax_submit(res_id, store_path) {
                 if (!allowMultiple && files.length > 0) {
                     $('.dz-input').hide();
                     $(".fb-upload-caption").toggleClass("hidden", true);
+                    $(".upload-toggle").toggleClass("hidden", true);
+                    $("#irods-group").toggleClass("hidden", true);
                 }
                 else {
                     $('.dz-input').show();
                     $(".fb-upload-caption").toggleClass("hidden", false);
+                    $(".upload-toggle").toggleClass("hidden", false);
+                    $("#irods-group").toggleClass("hidden", false);
                     Dropzone.forElement("#hsDropzone").files = [];
                 }
             }
 
             updateNavigationState();
+            updateSelectionMenuContext();
             $(".selection-menu").hide();
             $("#flag-uploading").remove();
             $("#fb-files-container, #fb-files-container").css("cursor", "default");
@@ -1182,6 +1425,7 @@ function get_irods_folder_struct_ajax_submit(res_id, store_path) {
             $('#fb-files-container').empty();
             setBreadCrumbs(store_path);
             $("#fb-files-container").prepend("<span>No files to display.</span>")
+            updateSelectionMenuContext();
         }
     });
 }
@@ -1250,7 +1494,7 @@ function create_irods_folder_ajax_submit(res_id, folder_path) {
     });
 }
 
-function add_ref_content_ajax_submit(res_id, curr_path, ref_name, ref_url) {
+function add_ref_content_ajax_submit(res_id, curr_path, ref_name, ref_url, validate_url_flag) {
     $("#fb-files-container, #fb-files-container").css("cursor", "progress");
     return $.ajax({
         type: "POST",
@@ -1260,21 +1504,36 @@ function add_ref_content_ajax_submit(res_id, curr_path, ref_name, ref_url) {
             res_id: res_id,
             curr_path: curr_path,
             ref_name: ref_name,
-            ref_url: ref_url
+            ref_url: ref_url,
+            validate_url_flag: validate_url_flag
         },
         success: function (result) {
             $('#add-reference-url-dialog').modal('hide');
+            $('#validate-reference-url-dialog').modal('hide');
             $("#txtRefName").val("");
             $("#txtRefURL").val("");
             $("#ref_file_note").show();
         },
-        error: function(xhr, errmsg, err){
-            display_error_message('Add reference content Failed', xhr.responseText);
+        error: function(xhr, errmsg, err) {
+            if(validate_url_flag) {
+                $('#add-reference-url-dialog').modal('hide');
+                // display warning modal dialog
+                $("#ref_name_passover").val(ref_name);
+                $("#ref_url_passover").val(ref_url);
+                $("#new_ref_url_passover").val('');
+                $('#validate-reference-url-dialog').modal('show');
+            }
+            else {
+                // Response text is not yet user friendly enough to display in UI
+                display_error_message('Error', "Failed to add reference content.");
+                $('#add-reference-url-dialog').modal('hide');
+                $('#validate-reference-url-dialog').modal('hide');
+            }
         }
     });
 }
 
-function update_ref_url_ajax_submit(res_id, curr_path, url_filename, new_ref_url) {
+function update_ref_url_ajax_submit(res_id, curr_path, url_filename, new_ref_url, validate_url_flag) {
     $("#fb-files-container, #fb-files-container").css("cursor", "progress");
     return $.ajax({
         type: "POST",
@@ -1284,37 +1543,25 @@ function update_ref_url_ajax_submit(res_id, curr_path, url_filename, new_ref_url
             res_id: res_id,
             curr_path: curr_path,
             url_filename: url_filename,
-            new_ref_url: new_ref_url
+            new_ref_url: new_ref_url,
+            validate_url_flag: validate_url_flag
         },
         success: function (result) {
+            $('#validate-reference-url-dialog').modal('hide');
         },
-        error: function(xhr, errmsg, err){
-            display_error_message('Edit reference url Failed', xhr.responseText);
-        }
-    });
-}
-
-// TODO: #2105: replace with move-to-folder and rename-file-or-folder: 
-// TODO: ambiguous function based upon conflation in REST API
-function move_or_rename_irods_file_or_folder_ajax_submit(res_id, source_path, target_path) {
-    $("#fb-files-container, #fb-files-container").css("cursor", "progress");
-    return $.ajax({
-        type: "POST",
-        url: '/hsapi/_internal/data-store-move-or-rename/',
-        async: true,
-        data: {
-            res_id: res_id,
-            source_path: source_path,
-            target_path: target_path
-        },
-        success: function (result) {
-            var target_rel_path = result.target_rel_path;
-            if (target_rel_path.length > 0) {
-                $("#fb-files-container li").removeClass("fb-cutting");
+        error: function (xhr, errmsg, err) {
+            if (validate_url_flag) {
+                // display warning modal dialog
+                $("#ref_name_passover").val(url_filename);
+                $("#ref_url_passover").val('');
+                $("#new_ref_url_passover").val(new_ref_url);
+                $('#validate-reference-url-dialog').modal('show');
             }
-        },
-        error: function(xhr, errmsg, err){
-            display_error_message('File Moving/Renaming Failed', xhr.responseText);
+            else {
+                // TODO: xhr.responseText not user friendly enough to display in the UI. Update once addressed.
+                display_error_message('Error: failed to edit referenced URL.');
+                $('#validate-reference-url-dialog').modal('hide');
+            }
         }
     });
 }
@@ -1365,11 +1612,6 @@ function rename_file_or_folder_ajax_submit(res_id, source_path, target_path) {
             display_error_message('File/Folder Renaming Failed', xhr.responseText);
         }
     });
-}
-
-function refreshResourceEditPage() {
-    var form = $("#frm_refresh_page_edit_mode");
-    form.submit();
 }
 
 function addFileTypeExtraMetadata(){
@@ -1579,13 +1821,13 @@ function deleteFileTypeTemporalCoverage(url, deleteButton) {
 
 function BindKeyValueFileTypeClickHandlers(){
     // bind key value add modal form OK button click event
-    var keyvalue_add_modal_form = $("#fileTypeMetaDataTab").find('#add-keyvalue-filetype-metadata');
+    var keyvalue_add_modal_form = $("#fileTypeMetaData").find('#add-keyvalue-filetype-metadata');
     keyvalue_add_modal_form.find("button.btn-primary").click(function () {
         addFileTypeExtraMetadata();
     });
 
     // bind all key value edit modal forms OK button click event
-    $("#fileTypeMetaDataTab").find('[id^=edit-keyvalue-filetype-metadata]').each(function(){
+    $("#fileTypeMetaData").find('[id^=edit-keyvalue-filetype-metadata]').each(function(){
         var formId = $(this).attr('id');
         $(this).find("button.btn-primary").click(function (){
             updateFileTypeExtraMetadata(formId);
@@ -1593,7 +1835,7 @@ function BindKeyValueFileTypeClickHandlers(){
     });
 
     // bind all key value delete modal forms Delete button click event
-    $("#fileTypeMetaDataTab").find('[id^=delete-keyvalue-filetype-metadata]').each(function(){
+    $("#fileTypeMetaData").find('[id^=delete-keyvalue-filetype-metadata]').each(function(){
         var formId = $(this).attr('id');
         $(this).find("button.btn-danger").click(function (){
             deleteFileTypeExtraMetadata(formId);
@@ -1675,22 +1917,35 @@ function updateEditCoverageStateFileType() {
     }
 }
 
-// act on spatial coverage type change
+// set form fields for spatial coverage for aggregation/file type
 function setFileTypeSpatialCoverageFormFields(logical_type, bindCoordinatesPicker){
-    // Don't allow the user to change the coverage type
     var $id_type_filetype_div = $("#id_type_filetype");
 
     if (logical_type !== "GenericLogicalFile" && logical_type !== "FileSetLogicalFile"){
-        // don't allow changing coverage type
+        // don't allow changing coverage type if aggregation type is not GenericLogicalFile or FileSetLogicalFile
         $id_type_filetype_div.parent().closest("div").css('pointer-events', 'none');
         $id_type_filetype_div.find(radioBoxSelector).attr('onclick', 'return false');
         $id_type_filetype_div.find(radioPointSelector).attr('onclick', 'return false');
-        if (logical_type !== "RefTimeseriesLogicalFile"){
-            $id_type_filetype_div.find(radioBoxSelector).attr('checked', 'checked');
+
+        var selectBoxTypeCoverage = false;
+        if ($id_type_filetype_div.find(radioBoxSelector).attr("checked") === "checked" ||
+            logical_type === "NetCDFLogicalFile" || logical_type === "GeoRasterLogicalFile"){
+            selectBoxTypeCoverage = true;
         }
-        $id_type_filetype_div.find(radioPointSelector).attr('disabled', true);
-        $id_type_filetype_div.find(radioPointSelector).parent().closest("label").addClass("text-muted");
+        if (selectBoxTypeCoverage){
+            $id_type_filetype_div.find(radioPointSelector).attr('disabled', true);
+            $id_type_filetype_div.find(radioPointSelector).parent().closest("label").addClass("text-muted");
+        }
+        else {
+            $id_type_filetype_div.find(radioBoxSelector).attr('disabled', true);
+            $id_type_filetype_div.find(radioBoxSelector).parent().closest("label").addClass("text-muted");
+        }
+
         if (logical_type === "NetCDFLogicalFile" || logical_type === "GeoRasterLogicalFile"){
+            // set box type coverage checked
+            $id_type_filetype_div.find(radioBoxSelector).attr('checked', 'checked');
+
+            // enable spatial coordinate picker (google map interface)
             $("#id-spatial-coverage-file-type").attr('data-coordinates-type', 'rectangle');
             $("#id-spatial-coverage-file-type").coordinatesPicker();
             $("#id-origcoverage-file-type").attr('data-coordinates-type', 'rectangle');
@@ -1698,7 +1953,9 @@ function setFileTypeSpatialCoverageFormFields(logical_type, bindCoordinatesPicke
         }
     }
     else {
-        // file type is "GenericLogicalFile" or "FileSetLogicalFile" - allow changing coverage type
+        // file type is "GenericLogicalFile" or "FileSetLogicalFile"
+        // allow changing coverage type
+        // provide option to delete spatial coverage at the aggregation level
         $id_type_filetype_div.find("input:radio").change(updateEditCoverageStateFileType);
         var onSpatialCoverageDelete = function () {
             var $btnDeleteSpatialCoverage = $("#id-btn-delete-spatial-filetype");
@@ -1723,35 +1980,23 @@ function setFileTypeSpatialCoverageFormFields(logical_type, bindCoordinatesPicke
         // set spatial form attribute 'data-coordinates-type' to point or rectangle
         if ($id_type_filetype_div.find(radioBoxSelector).attr("checked") === "checked"){
             $("#id-coverage-spatial-filetype").attr('data-coordinates-type', 'rectangle');
-            // check if spatial coverage exists
-            var $btnDeleteSpatialCoverage = $("#id-btn-delete-spatial-filetype");
-            if(!$btnDeleteSpatialCoverage.length) {
-                // delete option doesn't exist
-                $btnDeleteSpatialCoverage = addSpatialCoverageLink();
-            }
-            var formSpatialCoverage = $btnDeleteSpatialCoverage.closest('form');
-            var url = formSpatialCoverage.attr('action');
-            if(url.indexOf('update-file-metadata') !== -1) {
-                onSpatialCoverageDelete();
-            }
-            else {
-                $btnDeleteSpatialCoverage.hide()
-            }
         }
         else {
             $("#id-coverage-spatial-filetype").attr('data-coordinates-type', 'point');
-            $btnDeleteSpatialCoverage = $("#id-btn-delete-spatial-filetype");
-            if(!$btnDeleteSpatialCoverage.length) {
-                $btnDeleteSpatialCoverage = addSpatialCoverageLink();
-            }
-            formSpatialCoverage = $btnDeleteSpatialCoverage.closest('form');
-            url = formSpatialCoverage.attr('action');
-            if(url.indexOf('update-file-metadata') !== -1) {
-                onSpatialCoverageDelete();
-            }
-            else {
-                $btnDeleteSpatialCoverage.hide()
-            }
+        }
+        // check if spatial coverage exists
+        var $btnDeleteSpatialCoverage = $("#id-btn-delete-spatial-filetype");
+        if(!$btnDeleteSpatialCoverage.length) {
+            // delete option doesn't exist
+            $btnDeleteSpatialCoverage = addSpatialCoverageLink();
+        }
+        var formSpatialCoverage = $btnDeleteSpatialCoverage.closest('form');
+        var url = formSpatialCoverage.attr('action');
+        if(url.indexOf('update-file-metadata') !== -1) {
+            onSpatialCoverageDelete();
+        }
+        else {
+            $btnDeleteSpatialCoverage.hide()
         }
         if(bindCoordinatesPicker){
             $("#id-coverage-spatial-filetype").coordinatesPicker();
@@ -1791,8 +2036,8 @@ function updateResourceSpatialCoverage(spatialCoverage) {
         }
         $form.attr('action', update_url);
         var $id_type_div = $("#div_id_type");
-        var $point_radio = $id_type_div.find("#id_type_2");
-        var $box_radio = $id_type_div.find("#id_type_1");
+        var $point_radio = $id_type_div.find("input[value='point']");
+        var $box_radio = $id_type_div.find("input[value='box']");
         var resourceType = $("#resource-type").val();
         $("#id_name").val(spatialCoverage.name);
         if (spatialCoverage.type === 'point') {
@@ -1876,6 +2121,7 @@ function setFileTypeTemporalCoverageDeleteOption(logicalFileType) {
             $btnDeleteTemporalCoverage.hide()
     }
 }
+
 // updates the UI temporal coverage elements for the resource
 function updateResourceTemporalCoverage(temporalCoverage) {
     var $form = $("#id-coverage-temporal");
@@ -1901,6 +2147,7 @@ function updateResourceTemporalCoverage(temporalCoverage) {
     $("#id-coverage-temporal").find("button.btn-primary").hide();
     initializeDatePickers();
 }
+
 // updates the UI spatial coverage elements for the aggregation
 function updateAggregationSpatialCoverageUI(spatialCoverage, logicalFileID, elementID) {
     var $id_type_div = $("#id_type_filetype");
@@ -1966,7 +2213,7 @@ function updateAggregationTemporalCoverage(temporalCoverage, logicalFileID, cove
 }
 
 function setFileTypeMetadataFormsClickHandlers(){
-    $("#fileTypeMetaDataTab").find('form').each(function () {
+    $("#fileTypeMetaData").find('form').each(function () {
         var formId = $(this).attr('id');
         if (formId !== "update-netcdf-file" && formId !== "update-sqlite-file"&& formId !== "id-keywords-filetype" && formId !== "add-keyvalue-filetype-metadata") {
               $(this).find("button.btn-primary").click(function () {
@@ -1975,4 +2222,71 @@ function setFileTypeMetadataFormsClickHandlers(){
         }
     });
     BindKeyValueFileTypeClickHandlers();
+}
+
+function updateResourceKeywords(keywordString) {
+    // Update the value of the input used in form submission
+    $("#id-subject").find("#id_subject_keyword_control_input").val(keywordString);
+
+    // Populate keywords field in the UI
+    var keywords = keywordString.split(",");
+    $("#lst-tags").empty();
+
+    for (var i = 0; i < keywords.length; i++) {
+        if (keywords[i] != "") {
+            var li = $("<li class='tag'><span></span></li>");
+            li.find('span').text(keywords[i]);
+            li.append('&nbsp;<a><span class="glyphicon glyphicon-remove-circle icon-remove"></span></a>');
+            $("#lst-tags").append(li);
+        }
+    }
+}
+
+function updateResourceAuthors(authors) {
+    let container = $("#left-header-table .authors-wrapper");
+    container.empty();
+    authors.forEach(function (author) {
+        const shortID = $("#short-id").val();
+
+        // Could be cleaner using template literals, but those are currently not supported by IE 11
+        // https://kangax.github.io/compat-table/es6/
+        let authorTemplate = '<span> \
+            <a title="Edit ' + author.name + '" \
+               class="author-modal-trigger" data-id="' + author.id + '" \
+               data-name="' + author.name + '" data-order="' + author.order + '" \
+               data-description="' + author.description + '" \
+               data-organization="' + author.organization + '" \
+               data-email="' + author.email + '" \
+               data-address="' + author.address + '" \
+               data-phone="' + author.phone + '" \
+               data-homepage="' + author.homepage + '">' + (author.name ? author.name : author.organization) + ' \
+            </a> \
+            <form class="hidden-form" \
+                  action="/hsapi/_internal/' + shortID + '/creator/' + author.id + '/update-metadata/" \
+                  enctype="multipart/form-data"> \
+                ' + $(".main-container > input[name='csrfmiddlewaretoken']").outerHTML() +' \
+                <input name="resource-mode" type="hidden" value="edit"> \
+                <input name="creator-' + (author.order - 1) + '-name" \
+                       value="' + author.name + '"> \
+                <input name="creator-' + (author.order - 1) + '-description" \
+                       value="' + author.description + '"> \
+                <input name="creator-' + (author.order - 1) + '-organization" \
+                       value="' + author.organization + '"> \
+                <input name="creator-' + (author.order - 1) + '-email" \
+                       value="' + author.email + '"> \
+                <input name="creator-' + (author.order - 1) + '-address" \
+                       value="' + author.address + '"> \
+                <input name="creator-' + (author.order - 1) + '-phone" \
+                       type="text" value="' + author.phone + '"> \
+                <input name="creator-' + (author.order - 1) + '-homepage" type="url" \
+                       value="' + author.homepage + '"> \
+                <input class="input-order" \
+                       name="creator-' + (author.order - 1) + '-order" \
+                       type="number" value="' + author.order + '"> \
+            </form> \
+         </span>';
+
+        container.append(authorTemplate);
+    });
+
 }

@@ -8,6 +8,7 @@ from uuid import uuid4
 from languages_iso import languages as iso_languages
 from dateutil import parser
 from lxml import etree
+from markdown import markdown
 
 from django_irods.icommands import SessionException
 
@@ -17,7 +18,7 @@ from django.contrib.contenttypes.fields import GenericRelation
 from django.contrib.auth.models import User, Group
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.db.models.signals import post_save
 from django.db import transaction
 from django.dispatch import receiver
@@ -759,17 +760,17 @@ class Relation(AbstractMetaDataElement):
     """Define Relation custom metadata model."""
 
     SOURCE_TYPES = (
-        ('isHostedBy', 'Hosted By'),
-        ('isCopiedFrom', 'Copied From'),
-        ('isPartOf', 'Part Of'),
+        ('isHostedBy', 'The content of this resource is hosted by'),
+        ('isCopiedFrom', 'The content of this resource was copied from'),
+        ('isPartOf', 'The content of this resource is part of'),
         ('hasPart', 'Has Part'),
-        ('isExecutedBy', 'Executed By'),
-        ('isCreatedBy', 'Created By'),
+        ('isExecutedBy', 'The content of this resource can be executed by'),
+        ('isCreatedBy', 'The content of this resource was created by'),
         ('isVersionOf', 'Version Of'),
         ('isReplacedBy', 'Replaced By'),
-        ('isDataFor', 'Data For'),
-        ('cites', 'Cites'),
-        ('isDescribedBy', 'Described By'),
+        ('isDataFor', 'The content of this resource serves as the data for'),
+        ('cites', 'This resource cites'),
+        ('isDescribedBy', 'This resource is described by'),
     )
 
     # HS_RELATION_TERMS contains hydroshare custom terms that are not Dublin Core terms
@@ -1357,7 +1358,7 @@ class Coverage(AbstractMetaDataElement):
         This function should be used for displaying one spatial coverage element
         or one temporal coverage element
         """
-        root_div = div(cls="col-xs-6 col-sm-6", style="margin-bottom:40px;")
+        root_div = div(cls='content-block')
 
         def get_th(heading_name):
             return th(heading_name, cls="text-muted")
@@ -1365,16 +1366,11 @@ class Coverage(AbstractMetaDataElement):
         with root_div:
             if self.type == 'box' or self.type == 'point':
                 legend('Spatial Coverage')
-                with table(cls='custom-table'):
-                    with tbody():
-                        with tr():
-                            get_th('Coordinate Reference System')
-                            td(self.value['projection'])
-                        with tr():
-                            get_th('Coordinate Reference System Unit')
-                            td(self.value['units'])
-
-                h4('Extent')
+                div('Coordinate Reference System', cls='text-muted')
+                div(self.value['projection'])
+                div('Coordinate Reference System Unit', cls='text-muted space-top')
+                div(self.value['units'])
+                h4('Extent', cls='space-top')
                 with table(cls='custom-table'):
                     if self.type == 'box':
                         with tbody():
@@ -1668,11 +1664,29 @@ class AbstractResource(ResourcePermissionsMixin, ResourceIRODSMixin):
     # this field WILL NOT get recorded in bag and SHOULD NEVER be used for storing metadata
     extra_data = HStoreField(default={})
 
+    # for tracking number of times resource and its files have been downloaded
+    download_count = models.PositiveIntegerField(default=0)
+    # for tracking number of times resource has been viewed
+    view_count = models.PositiveIntegerField(default=0)
+
+    def update_view_count(self, request):
+        self.view_count += 1
+        self.save()
+
+    def update_download_count(self):
+        self.download_count += 1
+        self.save()
+
     # definition of resource logic
     @property
     def supports_folders(self):
         """Return whether folder operations are supported. Computed for polymorphic types."""
         return False
+
+    @property
+    def last_updated(self):
+        """Return the last updated date stored in metadata"""
+        return self.metadata.dates.all().filter(type='modified')[0].start_date
 
     @property
     def has_required_metadata(self):
@@ -1769,6 +1783,7 @@ class AbstractResource(ResourcePermissionsMixin, ResourceIRODSMixin):
         """
         # avoid import loop
         from hs_core.views.utils import run_script_to_update_hyrax_input_files
+        from hs_core.signals import post_raccess_change
 
         # access control is separate from validation logic
         if user is not None and not user.uaccess.can_change_resource_flags(self):
@@ -1798,6 +1813,7 @@ class AbstractResource(ResourcePermissionsMixin, ResourceIRODSMixin):
             if value:  # can't be public without being discoverable
                 self.raccess.discoverable = value
             self.raccess.save()
+            post_raccess_change.send(sender=self, resource=self)
 
             # public changed state: set isPublic metadata AVU accordingly
             if value != old_value:
@@ -2034,13 +2050,12 @@ class AbstractResource(ResourcePermissionsMixin, ResourceIRODSMixin):
 
     @property
     def metadata(self):
-        """Return a pointer to the metadata object for this resource.
+        """Return the metadata object for this resource."""
+        return self.content_object
 
-        This object can vary based upon resource type. Please override this function to
-        return the appropriate object for each resource type.
-        """
-        md = CoreMetaData()  # only this line needs to be changed when you override
-        return self._get_metadata(md)
+    @classmethod
+    def get_metadata_class(cls):
+        return CoreMetaData
 
     @property
     def first_creator(self):
@@ -2057,20 +2072,6 @@ class AbstractResource(ResourcePermissionsMixin, ResourceIRODSMixin):
         """
         return self.metadata.get_xml(pretty_print=pretty_print,
                                      include_format_elements=include_format_elements)
-
-    def _get_metadata(self, metatdata_obj):
-        """Get resource metadata from content_object."""
-        md_type = ContentType.objects.get_for_model(metatdata_obj)
-        res_type = ContentType.objects.get_for_model(self)
-        self.content_object = res_type.model_class().objects.get(id=self.id).content_object
-        if self.content_object:
-            return self.content_object
-        else:
-            metatdata_obj.save()
-            self.content_type = md_type
-            self.object_id = metatdata_obj.id
-            self.save()
-            return metatdata_obj
 
     def is_aggregation_xml_file(self, file_path):
         """Checks if the file path *file_path* is one of the aggregation related xml file paths
@@ -2253,14 +2254,66 @@ class AbstractResource(ResourcePermissionsMixin, ResourceIRODSMixin):
             return True
 
     @property
+    def readme_file(self):
+        """Returns a resource file that is at the root with a file name of either
+        'readme.txt' or 'readme.md' (filename is case insensitive). If no such file then None
+        is returned. If both files exist then resource file for readme.md is returned"""
+
+        res_files_at_root = self.files.filter(file_folder=None)
+        readme_txt_file = None
+        readme_md_file = None
+        for res_file in res_files_at_root:
+            if res_file.file_name.lower() == 'readme.md':
+                readme_md_file = res_file
+            elif res_file.file_name.lower() == 'readme.txt':
+                readme_txt_file = res_file
+            if readme_md_file is not None:
+                break
+
+        if readme_md_file is not None:
+            return readme_md_file
+        else:
+            return readme_txt_file
+
+    def get_readme_file_content(self):
+        """Gets the content of the readme file. If both a readme.md and a readme.txt file exist,
+        then the content of the readme.md file is returned, otherwise None
+
+        Note: The user uploaded readme file if originally not encoded as utf-8, then any non-ascii
+        characters in the file will be escaped when we return the file content.
+        """
+        readme_file = self.readme_file
+        if readme_file is not None:
+            readme_file_content = readme_file.read().decode('utf-8', 'ignore')
+            if readme_file.extension.lower() == '.md':
+                markdown_file_content = markdown(readme_file_content)
+                return {'content': markdown_file_content,
+                        'file_name': readme_file.file_name, 'file_type': 'md'}
+            else:
+                return {'content': readme_file_content, 'file_name': readme_file.file_name}
+        return readme_file
+
+    @property
     def logical_files(self):
-        """Get list of logical files for resource."""
+        """Get a list of logical files for resource."""
         logical_files_list = []
         for res_file in self.files.all():
             if res_file.logical_file is not None:
                 if res_file.logical_file not in logical_files_list:
                     logical_files_list.append(res_file.logical_file)
         return logical_files_list
+
+    @property
+    def aggregation_types(self):
+        """Gets a list of all aggregation types that currently exist in this resource"""
+        aggr_types = []
+        aggr_type_names = []
+        for lf in self.logical_files:
+            if lf.type_name not in aggr_type_names:
+                aggr_type_names.append(lf.type_name)
+                aggr_type = lf.get_aggregation_display_name().split(":")[0]
+                aggr_types.append(aggr_type)
+        return aggr_types
 
     @property
     def non_logical_files(self):
@@ -2493,6 +2546,7 @@ class ResourceFile(ResourceFileIRODSMixin):
                                                   related_name="files")
     logical_file_content_object = GenericForeignKey('logical_file_content_type',
                                                     'logical_file_object_id')
+    _size = models.BigIntegerField(default=-1)
 
     def __str__(self):
         """Return resource filename or federated resource filename for string representation."""
@@ -2619,30 +2673,13 @@ class ResourceFile(ResourceFileIRODSMixin):
         """Return content_object representing the resource from a resource file."""
         return self.content_object
 
-    # TODO: write unit test
     @property
     def size(self):
-        """Return file size for federated or non-federated files."""
-        if self.resource.resource_federation_path:
-            if __debug__:
-                assert self.resource_file.name is None or \
-                    self.resource_file.name == ''
-            try:
-                return self.fed_resource_file.size
-            except SessionException:
-                logger = logging.getLogger(__name__)
-                logger.warn("file {} not found".format(self.storage_path))
-                return 0
-        else:
-            if __debug__:
-                assert self.fed_resource_file.name is None or \
-                    self.fed_resource_file.name == ''
-            try:
-                return self.resource_file.size
-            except SessionException:
-                logger = logging.getLogger(__name__)
-                logger.warn("file {} not found".format(self.storage_path))
-                return 0
+        """Return file size of the file.
+        Calculates the size first if it has not been calculated yet."""
+        if self._size < 0:
+            self.calculate_size()
+        return self._size
 
     # TODO: write unit test
     @property
@@ -2661,12 +2698,11 @@ class ResourceFile(ResourceFileIRODSMixin):
             return istorage.exists(self.resource_file.name)
 
     # TODO: write unit test
-    @property
     def read(self):
         if self.resource.is_federated:
-            return self.fed_resource_file.read
+            return self.fed_resource_file.read()
         else:
-            return self.resource_file.read
+            return self.resource_file.read()
 
     @property
     def storage_path(self):
@@ -2690,6 +2726,30 @@ class ResourceFile(ResourceFileIRODSMixin):
                 assert self.fed_resource_file.name is None or \
                     self.fed_resource_file.name == ''
             return self.resource_file.name
+
+    def calculate_size(self):
+        """Reads the file size and saves to the DB"""
+        if self.resource.resource_federation_path:
+            if __debug__:
+                assert self.resource_file.name is None or \
+                    self.resource_file.name == ''
+            try:
+                self._size = self.fed_resource_file.size
+            except SessionException:
+                logger = logging.getLogger(__name__)
+                logger.warn("file {} not found".format(self.storage_path))
+                self._size = 0
+        else:
+            if __debug__:
+                assert self.fed_resource_file.name is None or \
+                    self.fed_resource_file.name == ''
+            try:
+                self._size = self.resource_file.size
+            except SessionException:
+                logger = logging.getLogger(__name__)
+                logger.warn("file {} not found".format(self.storage_path))
+                self._size = 0
+        self.save()
 
     # ResourceFile API handles file operations
     def set_storage_path(self, path, test_exists=True):
@@ -3292,9 +3352,17 @@ class BaseResource(Page, AbstractResource):
 
         Raises SessionException if iRODS fails.
         """
+        # trigger file size read for files that haven't been set yet
+        for f in self.files.filter(_size__lt=0):
+            f.calculate_size()
         # compute the total file size for the resource
-        f_sizes = [f.size for f in self.files.all()]
-        return sum(f_sizes)
+        res_size_dict = self.files.aggregate(Sum('_size'))
+        # handle case if no resource files
+        res_size = res_size_dict['_size__sum']
+        if not res_size:
+            # in case of no files
+            res_size = 0
+        return res_size
 
     @property
     def verbose_name(self):
@@ -3478,6 +3546,14 @@ class CoreMetaData(models.Model):
         return self.coverages.filter(type='period').first()
 
     @property
+    def spatial_coverage_default_projection(self):
+        return 'WGS 84 EPSG:4326'
+
+    @property
+    def spatial_coverage_default_units(self):
+        return 'Decimal degrees'
+
+    @property
     def serializer(self):
         """Return an instance of rest_framework Serializer for self
         Note: Subclass must override this property
@@ -3525,7 +3601,7 @@ class CoreMetaData(models.Model):
             parsed_metadata.append({"language": {"code": metadata.pop('language')}})
 
         if 'rights' in keys_to_update:
-            parsed_metadata.append({"rights": {"statement": metadata.pop('rights')}})
+            parsed_metadata.append({"rights": metadata.pop('rights')})
 
         if 'sources' in keys_to_update:
             for source in metadata.pop('sources'):
@@ -3534,6 +3610,16 @@ class CoreMetaData(models.Model):
         if 'subjects' in keys_to_update:
             for subject in metadata.pop('subjects'):
                 parsed_metadata.append({"subject": {"value": subject['value']}})
+
+        if 'funding_agencies' in keys_to_update:
+            for agency in metadata.pop("funding_agencies"):
+                # using fundingagency instead of funding_agency to be consistent with UI
+                # add-metadata logic as well as the term for the metadata element.
+                parsed_metadata.append({"fundingagency": agency})
+
+        if 'relations' in keys_to_update:
+            for relation in metadata.pop('relations'):
+                parsed_metadata.append({"relation": relation})
 
     @classmethod
     def get_supported_element_names(cls):
@@ -3688,7 +3774,7 @@ class CoreMetaData(models.Model):
         """
         from forms import TitleValidationForm, AbstractValidationForm, LanguageValidationForm, \
             RightsValidationForm, CreatorValidationForm, ContributorValidationForm, \
-            SourceValidationForm, RelationValidationForm
+            SourceValidationForm, RelationValidationForm, FundingAgencyValidationForm
 
         validation_forms_mapping = {'title': TitleValidationForm,
                                     'description': AbstractValidationForm,
@@ -3697,7 +3783,8 @@ class CoreMetaData(models.Model):
                                     'creator': CreatorValidationForm,
                                     'contributor': ContributorValidationForm,
                                     'source': SourceValidationForm,
-                                    'relation': RelationValidationForm
+                                    'relation': RelationValidationForm,
+                                    'fundingagency': FundingAgencyValidationForm
                                     }
         # updating non-repeatable elements
         with transaction.atomic():
@@ -3787,6 +3874,22 @@ class CoreMetaData(models.Model):
                             self.identifiers.filter(name=id_item[element_name]['name']).delete()
                             self.create_element(element_model_name=element_name,
                                                 **id_item[element_name])
+
+            element_name = 'fundingagency'
+            identifier_list = [id_dict for id_dict in metadata if element_name in id_dict]
+            if len(identifier_list) > 0:
+                for id_item in identifier_list:
+                    validation_form = validation_forms_mapping[element_name](
+                        id_item[element_name])
+                    if not validation_form.is_valid():
+                        err_string = self.get_form_errors_as_string(validation_form)
+                        raise ValidationError(err_string)
+                # update_repeatable_elements will append an 's' to element_name before getattr,
+                # unless property_name is provided.  I'd like to remove English grammar rules from
+                # our codebase, but in the interest of time, I'll just add a special case for
+                # handling funding_agencies
+                self.update_repeatable_element(element_name=element_name, metadata=metadata,
+                                               property_name="funding_agencies")
 
     def get_xml(self, pretty_print=True, include_format_elements=True):
         """Get metadata XML rendering."""
