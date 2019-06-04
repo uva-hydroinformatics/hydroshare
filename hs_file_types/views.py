@@ -20,7 +20,8 @@ from hs_core.views.utils import ACTION_TO_AUTHORIZE, authorize, get_coverage_dat
 from hs_core.hydroshare.utils import resource_modified
 
 from .models import GeoRasterLogicalFile, NetCDFLogicalFile, GeoFeatureLogicalFile, \
-    RefTimeseriesLogicalFile, TimeSeriesLogicalFile, GenericLogicalFile, FileSetLogicalFile
+    RefTimeseriesLogicalFile, TimeSeriesLogicalFile, GenericLogicalFile, FileSetLogicalFile, \
+    ModelInstanceLogicalFile
 
 from .utils import set_logical_file_type
 
@@ -30,6 +31,7 @@ FILE_TYPE_MAP = {"GenericLogicalFile": GenericLogicalFile,
                  "NetCDFLogicalFile": NetCDFLogicalFile,
                  "GeoFeatureLogicalFile": GeoFeatureLogicalFile,
                  "RefTimeseriesLogicalFile": RefTimeseriesLogicalFile,
+                 "ModelInstanceLogicalFile": ModelInstanceLogicalFile,
                  "TimeSeriesLogicalFile": TimeSeriesLogicalFile
                  }
 

@@ -5,29 +5,27 @@ from django.db import models
 
 from hs_core.models import ResourceFile
 from base import AbstractLogicalFile
-from generic import GenericFileMetaDataMixin
+from fileset import FileSetMetaData, FileSetLogicalFile
 
 
-class ModelInstanceFileMetadata(GenericFileMetaDataMixin):
+class ModelInstanceFileMetadata(FileSetMetaData):
     pass
 
 
-class ModelInstanceLogicalFile(AbstractLogicalFile):
-    """ One more files in a specific folder can be part of this aggregation """
-
-    metadata = models.OneToOneField(FileSetMetaData, related_name="logical_file")
+class ModelInstanceLogicalFile(FileSetLogicalFile):
+    # I copied an pasted the rest GenericLogicalFile and just changed anything
+    # that said "generic" to "model instance"
+    metadata = models.OneToOneField(ModelInstanceFileMetadata)
     # folder path relative to {resource_id}/data/contents/ that represents this aggregation
-    # folder becomes the name of the aggregation
-    folder = models.CharField(max_length=4096)
     data_type = "ModelInstance"
 
     @classmethod
     def create(cls, resource):
         # this custom method MUST be used to create an instance of this class
-        generic_metadata = FileSetMetaData.objects.create(keywords=[])
+        mi_metadata = ModelInstanceFileMetadata.objects.create(keywords=[])
         # Note we are not creating the logical file record in DB at this point
         # the caller must save this to DB
-        return cls(metadata=generic_metadata, resource=resource)
+        return cls(metadata=mi_metadata, resource=resource)
 
     @staticmethod
     def get_aggregation_display_name():
@@ -45,36 +43,6 @@ class ModelInstanceLogicalFile(AbstractLogicalFile):
         for File Set).
         """
         return "Model Instance"
-
-    @property
-    def can_contain_folders(self):
-        """This aggregation can contain folders"""
-        return True
-
-    @classmethod
-    def get_main_file_type(cls):
-        """The main file type for this aggregation - no specific main file"""
-        return ".*"
-
-    @classmethod
-    def check_files_for_aggregation_type(cls, files):
-        """Checks if the specified files can be used to set this aggregation type
-        :param  files: a list of ResourceFile objects
-
-        :return If the files meet the requirements of this aggregation type, then returns this
-        aggregation class name, otherwise empty string.
-        """
-        if len(files) == 0:
-            # no files
-            return ""
-
-        return cls.__name__
-
-    @classmethod
-    def get_primary_resouce_file(cls, resource_files):
-        """Gets any one resource file from the list of files *resource_files* """
-
-        return resource_files[0] if resource_files else None
 
     @classmethod
     def set_file_type(cls, resource, user, file_id=None, folder_path=None):
@@ -102,80 +70,4 @@ class ModelInstanceLogicalFile(AbstractLogicalFile):
         logical_file.create_aggregation_xml_documents()
         log.info("Fie set aggregation was created for folder:{}.".format(folder_path))
 
-    def add_resource_files_in_folder(self, resource, folder):
-        """
-        A helper for creating aggregation. Makes all resource files in a given folder and its
-        sub folders as part of the aggregation/logical file type
-        :param  resource:  an instance of CompositeResource
-        :param  folder: folder from which all files need to be made part of this aggregation
-        """
 
-        # get all resource files that in folder *folder* and all its sub folders
-        res_files = ResourceFile.list_folder(resource=resource, folder=folder, sub_folders=True)
-
-        for res_file in res_files:
-            if not res_file.has_logical_file:
-                self.add_resource_file(res_file)
-            elif res_file.logical_file.is_fileset and not \
-                    res_file.logical_file.aggregation_name.startswith(folder):
-                # resource file that is part of a fileset aggregation where the fileset aggregation
-                # is not a sub folder of *folder* needs to be made part of this new fileset
-                # aggregation
-                self.add_resource_file(res_file)
-
-        return res_files
-
-    def update_temporal_coverage(self):
-        """Updates temporal coverage of this fileset instance based on the contained temporal
-        coverages of aggregations (file type). Note: This action will overwrite any existing
-        fileset temporal coverage data.
-        """
-
-        from ..utils import update_target_temporal_coverage
-
-        update_target_temporal_coverage(self)
-
-    def update_spatial_coverage(self):
-        """Updates spatial coverage of this fileset instance based on the contained spatial
-        coverages of aggregations (file type). Note: This action will overwrite any existing
-        fileset spatial coverage data.
-        """
-        from ..utils import update_target_spatial_coverage
-
-        update_target_spatial_coverage(self)
-
-    def update_coverage(self):
-        """Update fileset spatial and temporal coverage based on the corresponding coverages
-        from all the contained aggregations (logical file) only if the fileset coverage is not
-        already set"""
-
-        # update fileset spatial coverage only if there is no spatial coverage already
-        if self.metadata.spatial_coverage is None:
-            self.update_spatial_coverage()
-
-        # update fileset temporal coverage only if there is no temporal coverage already
-        if self.metadata.temporal_coverage is None:
-            self.update_temporal_coverage()
-
-    def get_children(self):
-        """Return a list of aggregation that this (self) aggregation contains"""
-        child_aggregations = []
-        for aggr in self.resource.logical_files:
-            parent_aggr = aggr.get_parent()
-            if parent_aggr is not None and parent_aggr == self:
-                child_aggregations.append(aggr)
-
-        return child_aggregations
-
-    def update_folder(self, new_folder):
-        """Update folder attribute of this fileset (self) and folder attribute of all fileset
-        aggregations that exist under self.
-        When folder name of a fileset aggregation is changed, the folder attribute of all nested
-        fileset aggregations needs to be updated.
-        :param  new_folder:  new folder path of the self
-        """
-
-        for aggr in self.resource.logical_files:
-            if aggr.is_fileset and aggr.folder.startswith(self.folder):
-                aggr.folder = new_folder + aggr.folder[len(self.folder):]
-                aggr.save()

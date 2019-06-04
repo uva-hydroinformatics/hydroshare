@@ -6,3 +6,4 @@ from geofeature import GeoFeatureFileMetaData, GeoFeatureLogicalFile    # noqa
 from reftimeseries import RefTimeseriesFileMetaData, RefTimeseriesLogicalFile   # noqa
 from timeseries import TimeSeriesFileMetaData, TimeSeriesLogicalFile     # noqa
 from fileset import FileSetMetaData, FileSetLogicalFile     # noqa
+from modelinstance import ModelInstanceLogicalFile, ModelInstanceFileMetadata     # noqa
