@@ -12,7 +12,7 @@ class ModelInstanceFileMetadata(FileSetMetaData):
     pass
 
 
-class ModelInstanceLogicalFile(FileSetLogicalFile):
+class ModelInstanceLogicalFile(AbstractLogicalFile):
     # I copied an pasted the rest GenericLogicalFile and just changed anything
     # that said "generic" to "model instance"
     metadata = models.OneToOneField(ModelInstanceFileMetadata)
@@ -27,6 +27,11 @@ class ModelInstanceLogicalFile(FileSetLogicalFile):
         # the caller must save this to DB
         return cls(metadata=mi_metadata, resource=resource)
 
+    @classmethod
+    def get_primary_resouce_file(cls, resource_files):
+        """Gets any one resource file from the list of files *resource_files* """
+
+        return resource_files[0] if resource_files else None
     @staticmethod
     def get_aggregation_display_name():
         return 'Model Instance: One or more files that make up a model instance'
@@ -43,6 +48,24 @@ class ModelInstanceLogicalFile(FileSetLogicalFile):
         for File Set).
         """
         return "Model Instance"
+
+    @classmethod
+    def validate_element_data(cls, request, element_name):
+        pass
+
+    @classmethod
+    def check_files_for_aggregation_type(cls, files):
+        """Checks if the specified files can be used to set this aggregation type
+        :param  files: a list of ResourceFile objects
+
+        :return If the files meet the requirements of this aggregation type, then returns this
+        aggregation class name, otherwise empty string.
+        """
+        if len(files) == 0:
+            # no files
+            return ""
+
+        return cls.__name__
 
     @classmethod
     def set_file_type(cls, resource, user, file_id=None, folder_path=None):

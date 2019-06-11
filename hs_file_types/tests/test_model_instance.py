@@ -11,10 +11,10 @@ from utils import CompositeResourceTestMixin
 from hs_file_types.models import ModelInstanceLogicalFile 
 
 
-class FileSetFileTypeTest(MockIRODSTestCaseMixin, TransactionTestCase,
+class ModelInstanceTest(MockIRODSTestCaseMixin, TransactionTestCase,
                           CompositeResourceTestMixin):
     def setUp(self):
-        super(FileSetFileTypeTest, self).setUp()
+        super(ModelInstanceTest, self).setUp()
         self.group, _ = Group.objects.get_or_create(name='Hydroshare Author')
         self.user = hydroshare.create_account(
             'user1@nowhere.com',
@@ -53,7 +53,7 @@ class FileSetFileTypeTest(MockIRODSTestCaseMixin, TransactionTestCase,
         # file has the same folder
         self.assertEqual(res_file.file_folder, new_folder)
         self.assertEqual(res_file.logical_file_type_name, self.logical_file_type_name)
-        self.assertEqual(FileSetLogicalFile.objects.count(), 1)
+        self.assertEqual(ModelInstanceLogicalFile.objects.count(), 1)
         # aggregation dataset name should be same as the folder name
         self.assertEqual(res_file.logical_file.dataset_name, new_folder)
 
