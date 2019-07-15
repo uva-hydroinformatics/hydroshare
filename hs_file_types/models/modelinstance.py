@@ -4,18 +4,64 @@ import logging
 from django.db import models
 
 from hs_core.models import ResourceFile
-from base import AbstractLogicalFile
-from fileset import FileSetMetaData, FileSetLogicalFile
+import os
+import logging
 
+from django.db import models
 
-class ModelInstanceFileMetadata(FileSetMetaData):
-    pass
+from hs_core.models import ResourceFile
+from base import AbstractLogicalFile, AbstractMetaDataElement
+
+# from hs_modelinstance.models import ModelInstanceMetaDataMixin
+
+class ModelInstanceFileMetadata(AbstractMetaDataElement):
+    model_app_label = 'model_instance'
+    model_output = models.BooleanField(unique=True, default=False)
+    # this is a required element
+    executed_by_name = models.CharField(unique=True, null=True, blank=True, max_length=300)
+    executed_by_url = models.URLField(unique=True, null=True, blank=True)
+
+    def get_metadata_elements(self):
+        return [model_output, executed_by_name, executed_by_url]
+
+    def get_html(self):
+        pass
+
+    def get_html_forms(self):
+        pass
+
+    def validate_element_data(self):
+        pass
+
+    def has_all_required_elements(self):
+        if not super(ModelInstanceFileMetadata, self).has_all_required_elements():
+            return False
+        if not self.executed_by_name:
+            return False
+        return True
+
+    def get_xml(self):
+        """Generates ORI+RDF xml for this aggregation metadata"""
+        # get the xml root element and the xml element to which contains all other elements
+        RDF_ROOT, container_to_add_to = super(ModelInstanceMetaData, self)._get_xml_containers()
+        if self.model_output:
+            self._model_output.add_to_xml_container(container_to_add_to)
+
+        if executed_by_url in self.executed_by_url.all():
+            executed_by_url.add_to_xml_container(container_to_add_to)
+
+        if executed_by_name in self.executed_by_name.all():
+            executed_by_name.add_to_xml_container(container_to_add_to)
+
+        return CoreMetaData.XML_HEADER + '\n' + etree.tostring(RDF_ROOT, encoding='UTF-8',
+                                                               pretty_print=pretty_print)
 
 
 class ModelInstanceLogicalFile(AbstractLogicalFile):
     # I copied an pasted the rest GenericLogicalFile and just changed anything
     # that said "generic" to "model instance"
-    metadata = models.OneToOneField(ModelInstanceFileMetadata)
+    metadata = models.OneToOneField(ModelInstanceFileMetadata,
+                                    related_name="logical_file")
     # folder path relative to {resource_id}/data/contents/ that represents this aggregation
     data_type = "ModelInstance"
 
@@ -91,6 +137,4 @@ class ModelInstanceLogicalFile(AbstractLogicalFile):
         # make all the files in the selected folder as part of the aggregation
         logical_file.add_resource_files_in_folder(resource, folder_path)
         logical_file.create_aggregation_xml_documents()
-        log.info("Fie set aggregation was created for folder:{}.".format(folder_path))
-
-
+        log.info("File set aggregation was created for folder:{}.".format(folder_path))
