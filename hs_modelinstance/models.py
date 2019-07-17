@@ -80,7 +80,7 @@ class ModelInstanceMetaDataMixin(CoreMetaData):
     @classmethod
     def get_supported_element_names(cls):
         # get the names of all core metadata elements
-        elements = super(ModelInstanceMetaData, cls).get_supported_element_names()
+        elements = super(ModelInstanceMetaDataMixin, cls).get_supported_element_names()
         # add the name of any additional element to the list
         elements.append('ModelOutput')
         elements.append('ExecutedBy')
@@ -92,9 +92,9 @@ class ModelInstanceMetaDataMixin(CoreMetaData):
         return True
 
     def get_required_missing_elements(self):  # show missing required meta
-        missing_required_elements = super(GeographicFeatureMetaDataMixin, self). \
+        missing_required_elements = super(ModelInstanceMetaDataMixin, self). \
             get_required_missing_elements()
-        if not self._executed_by.model_name:
+        if not self.executed_by.model_name:
             missing_required_elements.append('Executed By Model Name')
 
         return missing_required_elements
