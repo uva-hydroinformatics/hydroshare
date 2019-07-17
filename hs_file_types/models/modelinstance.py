@@ -4,57 +4,52 @@ import logging
 from django.db import models
 
 from hs_core.models import ResourceFile
-import os
-import logging
+from base import AbstractLogicalFile, AbstractFileMetaData
 
-from django.db import models
+from hs_modelinstance.models import ModelInstanceMetaDataMixin
 
-from hs_core.models import ResourceFile
-from base import AbstractLogicalFile, AbstractMetaDataElement
-
-# from hs_modelinstance.models import ModelInstanceMetaDataMixin
-
-class ModelInstanceFileMetadata(AbstractMetaDataElement):
-    model_app_label = 'model_instance'
-    model_output = models.BooleanField(unique=True, default=False)
-    # this is a required element
-    executed_by_name = models.CharField(unique=True, null=True, blank=True, max_length=300)
-    executed_by_url = models.URLField(unique=True, null=True, blank=True)
+class ModelInstanceFileMetadata(ModelInstanceMetaDataMixin, AbstractFileMetaData):
+    model_app_label = 'hs_model_instance_resource'
 
     def get_metadata_elements(self):
-        return [model_output, executed_by_name, executed_by_url]
+        elements = super(ModelInstanceFileMetadata, self).get_metadata_elements()
+        elements += [self.model_output, self.executed_by]
+        return elements
+
+    # @classmethod
+    # def get_metadata_model_classes(cls):
+        # metadata_model_classes = super(GeoFeatureFileMetaData, cls).get_metadata_model_classes()
+        # metadata_model_classes['originalcoverage'] = OriginalCoverage
+        # metadata_model_classes['geometryinformation'] = GeometryInformation
+        # metadata_model_classes['fieldinformation'] = FieldInformation
+        # return metadata_model_classes
 
     def get_html(self):
         pass
 
-    def get_html_forms(self):
+
+    def get_html_forms(self, datatset_name_form=True):
+        pass 
+
+    @classmethod
+    def validate_element_data(cls, request, element_name):
         pass
 
-    def validate_element_data(self):
-        pass
-
-    def has_all_required_elements(self):
-        if not super(ModelInstanceFileMetadata, self).has_all_required_elements():
-            return False
-        if not self.executed_by_name:
-            return False
-        return True
-
-    def get_xml(self):
+    def get_xml(self, pretty_print=True):
         """Generates ORI+RDF xml for this aggregation metadata"""
-        # get the xml root element and the xml element to which contains all other elements
-        RDF_ROOT, container_to_add_to = super(ModelInstanceMetaData, self)._get_xml_containers()
-        if self.model_output:
-            self._model_output.add_to_xml_container(container_to_add_to)
 
-        if executed_by_url in self.executed_by_url.all():
-            executed_by_url.add_to_xml_container(container_to_add_to)
+        # # get the xml root element and the xml element to which contains all other elements
+        # RDF_ROOT, container_to_add_to = super(ModelInstanceFileMetadata, self)._get_xml_containers()
+        # if self._model_output:
+            # self._model_output.add_to_xml_container(container_to_add_to)
 
-        if executed_by_name in self.executed_by_name.all():
-            executed_by_name.add_to_xml_container(container_to_add_to)
+        # if self._executed_by:
+            # self._executed_by.add_to_xml_container(container_to_add_to)
 
-        return CoreMetaData.XML_HEADER + '\n' + etree.tostring(RDF_ROOT, encoding='UTF-8',
-                                                               pretty_print=pretty_print)
+        # return CoreMetaData.XML_HEADER + '\n' + etree.tostring(RDF_ROOT, encoding='UTF-8',
+                                                               # pretty_print=pretty_print)
+        return "my xml"
+>>>>>>> my_b
 
 
 class ModelInstanceLogicalFile(AbstractLogicalFile):

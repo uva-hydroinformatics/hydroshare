@@ -36,7 +36,7 @@ class ExecutedBy(AbstractMetaDataElement):
     term = 'ExecutedBY'
     # model_name: the id of the model program used for execution
     model_name = models.CharField(max_length=500, default=None)
-    model_program_fk = models.ForeignKey('hs_model_program.ModelProgramResource', null=True, blank=True, default=None, related_name='modelinstance')
+    model_url = models.URLField(max_length=500, default=None)
 
     def __unicode__(self):
         return self.model_name
@@ -44,67 +44,6 @@ class ExecutedBy(AbstractMetaDataElement):
     class Meta:
         # ExecutedBy element is not repeatable
         unique_together = ("content_type", "object_id")
-
-    @property
-    def modelProgramName(self):
-        if self.model_program_fk:
-            return self.model_program_fk.title
-        else:
-            return "Unspecified"
-
-    @property
-    def modelProgramIdentifier(self):
-        if self.model_program_fk:
-            return '%s%s' % (utils.current_site_url(), self.model_program_fk.get_absolute_url())
-        else:
-            return "None"
-
-    @classmethod
-    def create(cls, **kwargs):
-
-        # when creating a new resource version, we need to lookup the existing model_program_fk
-        if 'model_program_fk' in kwargs:
-
-            # get the foreign key id if one has been set (i.e. when creating a new version)
-            mp_short_id = kwargs['model_program_fk']
-
-            # get the MP object that matches.  Returns None if nothing is found
-            obj = ModelProgramResource.objects.filter(id=mp_short_id).first()
-
-        # when adding or changing the model_program_fk, we need to lookup the model obj based on mp_short_id
-        else:
-            # get the selected model program short id that has been submitted via the form
-            mp_short_id = kwargs['model_name']
-
-            # get the MP object that matches.  Returns None if nothing is found
-            obj = ModelProgramResource.objects.filter(short_id=mp_short_id).first()
-
-
-        if obj is None:
-            # return Null
-            return None
-        else:
-            # return an instance of the ExecutedBy class using the selected Model Program as a foreign key
-            metadata_obj = kwargs['content_object']
-            title = obj.title
-            return super(ExecutedBy,cls).create(model_program_fk=obj, model_name=title, content_object=metadata_obj)
-
-    @classmethod
-    def update(cls, element_id, **kwargs):
-
-        # get the shortid of the selected model program (passed in from javascript)
-        shortid = kwargs['model_name']
-
-        # get the MP object that matches.  Returns None if nothing is found
-        obj = ModelProgramResource.objects.filter(short_id=shortid).first()
-
-        if obj is None:
-            # return a Null instance of the ExecutedBy class
-            return super(ExecutedBy,cls).update(model_program_fk=None, model_name='Unspecified', element_id=element_id)
-        else:
-            # return an instance of the ExecutedBy class using the selected Model Program as a foreign key
-            title = obj.title
-            return super(ExecutedBy,cls).update(model_program_fk=obj, model_name=title, element_id=element_id)
 
 
 # Model Instance Resource type
@@ -123,15 +62,12 @@ class ModelInstanceResource(BaseResource):
 
 processor_for(ModelInstanceResource)(resource_processor)
 
-
-# metadata container class
-class ModelInstanceMetaData(CoreMetaData):
+class ModelInstanceMetaDataMixin(CoreMetaData):
     _model_output = GenericRelation(ModelOutput)
     _executed_by = GenericRelation(ExecutedBy)
 
-    @property
-    def resource(self):
-        return ModelInstanceResource.objects.filter(object_id=self.id).first()
+    class Meta:
+        abstract = True
 
     @property
     def model_output(self):
@@ -140,6 +76,36 @@ class ModelInstanceMetaData(CoreMetaData):
     @property
     def executed_by(self):
         return self._executed_by.all().first()
+
+    @classmethod
+    def get_supported_element_names(cls):
+        # get the names of all core metadata elements
+        elements = super(ModelInstanceMetaData, cls).get_supported_element_names()
+        # add the name of any additional element to the list
+        elements.append('ModelOutput')
+        elements.append('ExecutedBy')
+        return elements
+
+    def has_all_required_elements(self):
+        if self.get_required_missing_elements():
+            return False
+        return True
+
+    def get_required_missing_elements(self):  # show missing required meta
+        missing_required_elements = super(GeographicFeatureMetaDataMixin, self). \
+            get_required_missing_elements()
+        if not self._executed_by.model_name:
+            missing_required_elements.append('Executed By Model Name')
+
+        return missing_required_elements
+
+# metadata container class
+class ModelInstanceMetaData(CoreMetaData):
+
+    @property
+    def resource(self):
+        return ModelInstanceResource.objects.filter(object_id=self.id).first()
+
 
     @property
     def serializer(self):
@@ -158,15 +124,6 @@ class ModelInstanceMetaData(CoreMetaData):
 
         if 'executedby' in keys_to_update:
             parsed_metadata.append({"executedby": metadata.pop('executedby')})
-
-    @classmethod
-    def get_supported_element_names(cls):
-        # get the names of all core metadata elements
-        elements = super(ModelInstanceMetaData, cls).get_supported_element_names()
-        # add the name of any additional element to the list
-        elements.append('ModelOutput')
-        elements.append('ExecutedBy')
-        return elements
 
     def update(self, metadata, user):
         # overriding the base class update method for bulk update of metadata
@@ -192,6 +149,7 @@ class ModelInstanceMetaData(CoreMetaData):
 
     def get_xml(self, pretty_print=True, include_format_elements=True):
         # get the xml string representation of the core metadata elements
+        print "do I go here??"
         xml_string = super(ModelInstanceMetaData, self).get_xml(pretty_print=pretty_print)
 
         # create an etree xml object
