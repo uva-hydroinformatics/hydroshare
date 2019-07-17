@@ -70,8 +70,9 @@ class ModelInstanceTest(MockIRODSTestCaseMixin, TransactionTestCase,
         res_file = self.composite_resource.files.first()
         self.assertEqual(ModelInstanceLogicalFile.objects.count(), 0)
         ModelInstanceLogicalFile.set_file_type(self.composite_resource, self.user, folder_path=new_folder)
-        self.assertEqual(ModelInstanceLogicalFile.objects.count(), 1)
         res_file = self.composite_resource.files.first()
+        self.assertEqual(ModelInstanceLogicalFile.objects.count(), 1)
+        self.assertEqual(res_file.logical_file_type_name, self.logical_file_type_name)
 
         logical_file = res_file.logical_file
         my_model_name = 'my model'
