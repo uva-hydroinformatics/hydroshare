@@ -49,7 +49,6 @@ class ModelInstanceFileMetadata(ModelInstanceMetaDataMixin, AbstractFileMetaData
         # return CoreMetaData.XML_HEADER + '\n' + etree.tostring(RDF_ROOT, encoding='UTF-8',
                                                                # pretty_print=pretty_print)
         return "my xml"
->>>>>>> my_b
 
 
 class ModelInstanceLogicalFile(AbstractLogicalFile):
