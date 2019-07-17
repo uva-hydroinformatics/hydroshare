@@ -4,12 +4,51 @@ import logging
 from django.db import models
 
 from hs_core.models import ResourceFile
-from base import AbstractLogicalFile
-from fileset import FileSetMetaData, FileSetLogicalFile
+from base import AbstractLogicalFile, AbstractFileMetaData
+
+from hs_modelinstance.models import ModelInstanceMetaDataMixin
+
+class ModelInstanceFileMetadata(ModelInstanceMetaDataMixin, AbstractFileMetaData):
+    model_app_label = 'hs_model_instance_resource'
+
+    def get_metadata_elements(self):
+        elements = super(ModelInstanceFileMetadata, self).get_metadata_elements()
+        elements += [self.model_output, self.executed_by]
+        return elements
+
+    # @classmethod
+    # def get_metadata_model_classes(cls):
+        # metadata_model_classes = super(GeoFeatureFileMetaData, cls).get_metadata_model_classes()
+        # metadata_model_classes['originalcoverage'] = OriginalCoverage
+        # metadata_model_classes['geometryinformation'] = GeometryInformation
+        # metadata_model_classes['fieldinformation'] = FieldInformation
+        # return metadata_model_classes
+
+    def get_html(self):
+        pass
 
 
-class ModelInstanceFileMetadata(FileSetMetaData):
-    pass
+    def get_html_forms(self, datatset_name_form=True):
+        pass 
+
+    @classmethod
+    def validate_element_data(cls, request, element_name):
+        pass
+
+    def get_xml(self, pretty_print=True):
+        """Generates ORI+RDF xml for this aggregation metadata"""
+
+        # # get the xml root element and the xml element to which contains all other elements
+        # RDF_ROOT, container_to_add_to = super(ModelInstanceFileMetadata, self)._get_xml_containers()
+        # if self._model_output:
+            # self._model_output.add_to_xml_container(container_to_add_to)
+
+        # if self._executed_by:
+            # self._executed_by.add_to_xml_container(container_to_add_to)
+
+        # return CoreMetaData.XML_HEADER + '\n' + etree.tostring(RDF_ROOT, encoding='UTF-8',
+                                                               # pretty_print=pretty_print)
+        return "my xml"
 
 
 class ModelInstanceLogicalFile(AbstractLogicalFile):

@@ -59,3 +59,23 @@ class ModelInstanceTest(MockIRODSTestCaseMixin, TransactionTestCase,
 
         self.composite_resource.delete()
 
+    def test_model_instance_metadata(self):
+        """Test that we can add metadata to logical file """
+
+        self.create_composite_resource()
+        new_folder = 'model_instance_folder'
+        ResourceFile.create_folder(self.composite_resource, new_folder)
+        # add the the txt file to the resource at the above folder
+        self.add_file_to_resource(file_to_add=self.generic_file, upload_folder=new_folder)
+        res_file = self.composite_resource.files.first()
+        self.assertEqual(ModelInstanceLogicalFile.objects.count(), 0)
+        ModelInstanceLogicalFile.set_file_type(self.composite_resource, self.user, folder_path=new_folder)
+        self.assertEqual(ModelInstanceLogicalFile.objects.count(), 1)
+        res_file = self.composite_resource.files.first()
+
+        logical_file = res_file.logical_file
+        my_model_name = 'my model'
+        logical_file.metadata.executed_by.model_name = my_model_name
+        self.assertEqual(logical_file.metadata.executed_by.model_name, my_model_name)
+
+        self.composite_resource.delete()
