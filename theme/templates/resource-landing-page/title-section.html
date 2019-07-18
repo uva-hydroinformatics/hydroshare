@@ -48,9 +48,9 @@
                         aria-hidden="true">&times;</span></button>
                 {% if missing_metadata_elements %}
                     {% if just_created %}
-                        <strong>Congratulations! </strong>
-                        <span>Now that your resource has been created the following metadata are still required to
-                            {% if cm.resource_type != 'ToolResource' %}publish it or {% endif %}make it public or discoverable:</span>
+                        This is the landing page for the resource you just created. Add files in the content area below
+                        and enter metadata where needed. The following metadata is required for your resource to be
+                        {% if cm.resource_type != 'ToolResource' %} published or{% endif %} made public:
                     {% else %}
                         <span>The following metadata are still required to
                             {% if cm.resource_type != 'ToolResource' %}publish the resource or {% endif %}make the resource public or discoverable:</span>
@@ -117,7 +117,7 @@
 {% endif %}
 {# ======= Check MODFLOW Model Instance content files =======#}
 {% if cm.resource_type == "MODFLOWModelInstanceResource" %}
-	 {% if is_owner_user or is_edit_user%}
+	 {% if self_access_level == 'owner' or self_access_level == 'edit'%}
 		{% if cm.check_content_files %}
 		<div class="col-sm-12">
 		    <div id="missing-metadata-or-file" class="alert persistent {% if just_created %}alert-success{% else %}alert-warning{% endif %} alert-dismissible" role="alert">

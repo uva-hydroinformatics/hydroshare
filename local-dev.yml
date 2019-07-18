@@ -1,7 +1,7 @@
 version: '3'
 services:
   data.local.org:
-    image: hydroshare/hs-irods:latest
+    image: hydroshare/hs-irods:4.2.6
     container_name: data.local.org
     hostname: data.local.org
     links:
@@ -9,6 +9,7 @@ services:
     ports:
       - "1247:1247"
     volumes:
+      - "idata_root_vol:/root"
       - "idata_iconf_vol:/etc/irods"
       - "idata_vault_vol:/var/lib/irods"
       - "idata_pgres_vol:/var/lib/postgresql/data"
@@ -27,16 +28,12 @@ services:
       IRODS_GLOBAL_SESSION: 'True'
       REMOTE_USE_IRODS: 'True'
       HS_USER_ZONE_HOST: 'users.local.org'
-      HS_USER_ZONE_PROXY_USER: 'hsuserproxy'
-      HS_USER_ZONE_PROXY_USER_PWD: 'hsuserproxy'
-      HS_USER_ZONE_PROXY_USER_CREATE_USER_CMD: '/home/hsuserproxy/create_user.sh'
-      HS_USER_ZONE_PROXY_USER_DELETE_USER_CMD: '/home/hsuserproxy/delete_user.sh'
-      HS_LOCAL_PROXY_USER_IN_FED_ZONE: 'localHydroProxy'
-      HS_WWW_IRODS_PROXY_USER: 'wwwHydroProxy'
-      HS_WWW_IRODS_PROXY_USER_PWD: 'wwwHydroProxy'
-      HS_WWW_IRODS_HOST: 'data.local.org'
-      HS_IRODS_LOCAL_ZONE_DEF_RES: 'hydroshareLocalResc'
-      HS_WWW_IRODS_ZONE: 'hydroshareZone'
+      LINUX_ADMIN_USER_FOR_HS_USER_ZONE: 'hsuserproxy'
+      LINUX_ADMIN_USER_PWD_FOR_HS_USER_ZONE: 'hsuserproxy'
+      LINUX_ADMIN_USER_CREATE_USER_IN_USER_ZONE_CMD: '/home/hsuserproxy/create_user.sh'
+      LINUX_ADMIN_USER_DELETE_USER_IN_USER_ZONE_CMD: '/home/hsuserproxy/delete_user.sh'
+      HS_IRODS_PROXY_USER_IN_USER_ZONE: 'localHydroProxy'
+      HS_IRODS_USER_ZONE_DEF_RES: 'hydroshareLocalResc'
       HS_USER_IRODS_ZONE: 'hydroshareuserZone'
       IRODS_ZONE_NAME: 'hydroshareZone'
       IRODS_SERVER_ZONE_KEY: 'hydroshareZone_KEY'
@@ -46,10 +43,12 @@ services:
     stdin_open: true
     tty: true
   users.local.org:
-    image: hydroshare/hs-irods:latest
+    image: hydroshare/hs-irods:4.2.6
     container_name: users.local.org
     hostname: users.local.org
     volumes:
+      - "iuser_root_vol:/root"
+      - "iuser_hspx_vol:/home/hsuserproxy"
       - "iuser_iconf_vol:/etc/irods"
       - "iuser_vault_vol:/var/lib/irods"
       - "iuser_pgres_vol:/var/lib/postgresql/data"
@@ -68,16 +67,12 @@ services:
       IRODS_GLOBAL_SESSION: 'True'
       REMOTE_USE_IRODS: 'True'
       HS_USER_ZONE_HOST: 'users.local.org'
-      HS_USER_ZONE_PROXY_USER: 'hsuserproxy'
-      HS_USER_ZONE_PROXY_USER_PWD: 'hsuserproxy'
-      HS_USER_ZONE_PROXY_USER_CREATE_USER_CMD: '/home/hsuserproxy/create_user.sh'
-      HS_USER_ZONE_PROXY_USER_DELETE_USER_CMD: '/home/hsuserproxy/delete_user.sh'
-      HS_LOCAL_PROXY_USER_IN_FED_ZONE: 'localHydroProxy'
-      HS_WWW_IRODS_PROXY_USER: 'wwwHydroProxy'
-      HS_WWW_IRODS_PROXY_USER_PWD: 'wwwHydroProxy'
-      HS_WWW_IRODS_HOST: 'data.local.org'
-      HS_IRODS_LOCAL_ZONE_DEF_RES: 'hydroshareLocalResc'
-      HS_WWW_IRODS_ZONE: 'hydroshareZone'
+      LINUX_ADMIN_USER_FOR_HS_USER_ZONE: 'hsuserproxy'
+      LINUX_ADMIN_USER_PWD_FOR_HS_USER_ZONE: 'hsuserproxy'
+      LINUX_ADMIN_USER_CREATE_USER_IN_USER_ZONE_CMD: '/home/hsuserproxy/create_user.sh'
+      LINUX_ADMIN_USER_DELETE_USER_IN_USER_ZONE_CMD: '/home/hsuserproxy/delete_user.sh'
+      HS_IRODS_PROXY_USER_IN_USER_ZONE: 'localHydroProxy'
+      HS_IRODS_USER_ZONE_DEF_RES: 'hydroshareLocalResc'
       HS_USER_IRODS_ZONE: 'hydroshareuserZone'
       IRODS_ZONE_NAME: 'hydroshareuserZone'
       IRODS_SERVER_ZONE_KEY: 'hydroshareuserZone_KEY'
@@ -122,7 +117,7 @@ services:
     depends_on:
       - hydroshare
     ports:
-      - "80:80"
+      - "8080:80"
     volumes:
       - "./log/nginx:/var/log/nginx"
       - ".:/hydroshare"
@@ -161,6 +156,8 @@ services:
       - "temp_vol:/hs_tmp"
       # temp directory shared with celery workers
       - "share_vol:/shared_tmp"
+      # temp dir for whole container
+      - "hs_tmp_vol:/tmp"
     ports:
       - "1338:2022"
       - "8000:8000"
@@ -201,6 +198,8 @@ services:
       DJANGO_SETTINGS_MODULE: hydroshare.settings
     volumes:
       - ".:/hydroshare"
+      # temp dir for whole container
+      - "dw_tmp_vol:/tmp"
     links:
       - postgis:postgis
       - rabbitmq:rabbitmq
@@ -220,11 +219,16 @@ volumes:
   idata_iconf_vol:
   idata_vault_vol:
   idata_pgres_vol:
+  idata_root_vol:
   iuser_iconf_vol:
   iuser_vault_vol:
   iuser_pgres_vol:
+  iuser_root_vol:
+  iuser_hspx_vol:
   postgis_data_vol:
   solr_data_vol:
   temp_vol:
   share_vol:
+  hs_tmp_vol:
+  dw_tmp_vol:
   rabbitmq_data_vol:
