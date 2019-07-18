@@ -6,7 +6,6 @@ from django.db import models
 from hs_core.models import ResourceFile, CoreMetaData
 from base import AbstractLogicalFile, AbstractFileMetaData
 
-from hs_modelinstance.models import ModelInstanceMetaDataMixin, ModelOutput, ExecutedBy
 from lxml import etree
 
 class ModelInstanceFileMetadata(AbstractFileMetaData):
