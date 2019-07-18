@@ -33,10 +33,10 @@ class ModelOutput(AbstractMetaDataElement):
 
 
 class ExecutedBy(AbstractMetaDataElement):
-    term = 'ExecutedBY'
+    term = 'ExecutedBy'
     # model_name: the id of the model program used for execution
     model_name = models.CharField(max_length=500, default=None)
-    model_url = models.URLField(max_length=500, default=None)
+    model_url = models.URLField(max_length=500, default=None, null=True)
 
     def __unicode__(self):
         return self.model_name
@@ -62,7 +62,7 @@ class ModelInstanceResource(BaseResource):
 
 processor_for(ModelInstanceResource)(resource_processor)
 
-class ModelInstanceMetaDataMixin(CoreMetaData):
+class ModelInstanceMetaDataMixin(models.Model):
     _model_output = GenericRelation(ModelOutput)
     _executed_by = GenericRelation(ExecutedBy)
 

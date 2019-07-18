@@ -3,26 +3,26 @@ import logging
 
 from django.db import models
 
-from hs_core.models import ResourceFile
+from hs_core.models import ResourceFile, CoreMetaData
 from base import AbstractLogicalFile, AbstractFileMetaData
 
-from hs_modelinstance.models import ModelInstanceMetaDataMixin
+from hs_modelinstance.models import ModelInstanceMetaDataMixin, ModelOutput, ExecutedBy
+from lxml import etree
 
 class ModelInstanceFileMetadata(ModelInstanceMetaDataMixin, AbstractFileMetaData):
-    model_app_label = 'hs_model_instance_resource'
+    model_app_label = 'hs_modelinstance'
 
     def get_metadata_elements(self):
         elements = super(ModelInstanceFileMetadata, self).get_metadata_elements()
         elements += [self.model_output, self.executed_by]
         return elements
 
-    # @classmethod
-    # def get_metadata_model_classes(cls):
-        # metadata_model_classes = super(GeoFeatureFileMetaData, cls).get_metadata_model_classes()
-        # metadata_model_classes['originalcoverage'] = OriginalCoverage
-        # metadata_model_classes['geometryinformation'] = GeometryInformation
-        # metadata_model_classes['fieldinformation'] = FieldInformation
-        # return metadata_model_classes
+    @classmethod
+    def get_metadata_model_classes(cls):
+        metadata_model_classes = super(ModelInstanceFileMetadata, cls).get_metadata_model_classes()
+        metadata_model_classes['model_output'] = ModelOutput
+        metadata_model_classes['executed_by'] = ExecutedBy
+        return metadata_model_classes
 
     def get_html(self):
         pass
@@ -38,17 +38,16 @@ class ModelInstanceFileMetadata(ModelInstanceMetaDataMixin, AbstractFileMetaData
     def get_xml(self, pretty_print=True):
         """Generates ORI+RDF xml for this aggregation metadata"""
 
-        # # get the xml root element and the xml element to which contains all other elements
-        # RDF_ROOT, container_to_add_to = super(ModelInstanceFileMetadata, self)._get_xml_containers()
-        # if self._model_output:
-            # self._model_output.add_to_xml_container(container_to_add_to)
+        # get the xml root element and the xml element to which contains all other elements
+        RDF_ROOT, container_to_add_to = super(ModelInstanceFileMetadata, self)._get_xml_containers()
+        if self.model_output:
+            self.model_output.add_to_xml_container(container_to_add_to)
 
-        # if self._executed_by:
-            # self._executed_by.add_to_xml_container(container_to_add_to)
+        if self.executed_by:
+            self.executed_by.add_to_xml_container(container_to_add_to)
 
-        # return CoreMetaData.XML_HEADER + '\n' + etree.tostring(RDF_ROOT, encoding='UTF-8',
-                                                               # pretty_print=pretty_print)
-        return "my xml"
+        return CoreMetaData.XML_HEADER + '\n' + etree.tostring(RDF_ROOT, encoding='UTF-8',
+                                                               pretty_print=pretty_print)
 
 
 class ModelInstanceLogicalFile(AbstractLogicalFile):

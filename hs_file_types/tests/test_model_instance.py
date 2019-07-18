@@ -76,7 +76,14 @@ class ModelInstanceTest(MockIRODSTestCaseMixin, TransactionTestCase,
 
         logical_file = res_file.logical_file
         my_model_name = 'my model'
-        logical_file.metadata.executed_by.model_name = my_model_name
+        my_model_url = 'http://www.google.com'
+        logical_file.metadata.create_element('ModelOutput', includes_output=True)
+        logical_file.metadata.create_element('ExecutedBy',
+                                             model_name=my_model_name,
+                                             model_url=my_model_url
+                                             )
+        self.assertEqual(logical_file.metadata.model_output.includes_output, True)
         self.assertEqual(logical_file.metadata.executed_by.model_name, my_model_name)
+        self.assertEqual(logical_file.metadata.executed_by.model_url, my_model_url)
 
         self.composite_resource.delete()
