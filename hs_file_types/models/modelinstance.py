@@ -9,18 +9,20 @@ from base import AbstractLogicalFile, AbstractFileMetaData
 from hs_modelinstance.models import ModelInstanceMetaDataMixin, ModelOutput, ExecutedBy
 from lxml import etree
 
-class ModelInstanceFileMetadata(AbstractFileMetaData):
-    includes_model_output = models.BooleanField(default=False)
-    executedby_model_name = models.CharField(max_length=500, default=None, null=True)
-    executedby_model_url = models.URLField(max_length=500, default=None, null=True)
-
+class ModelInstanceFileMetadata(ModelInstanceMetaDataMixin, AbstractFileMetaData):
     model_app_label = 'hs_modelinstance'
 
     def get_metadata_elements(self):
         elements = super(ModelInstanceFileMetadata, self).get_metadata_elements()
-        elements += [self.includes_model_output, self.executedby_model_url,
-                     self.executedby_model_name]
+        elements += [self.model_output, self.executed_by]
         return elements
+
+    @classmethod
+    def get_metadata_model_classes(cls):
+        metadata_model_classes = super(ModelInstanceFileMetadata, cls).get_metadata_model_classes()
+        metadata_model_classes['model_output'] = ModelOutput
+        metadata_model_classes['executed_by'] = ExecutedBy
+        return metadata_model_classes
 
     def get_html(self):
         pass
@@ -28,28 +30,6 @@ class ModelInstanceFileMetadata(AbstractFileMetaData):
 
     def get_html_forms(self, datatset_name_form=True):
         pass 
-
-    def get_supported_element_names(cls):
-        # get the names of all core metadata elements
-        elements = super(ModelInstanceFileMetadata, cls).get_supported_element_names()
-        # add the name of any additional element to the list
-        elements.append('includes_model_output')
-        elements.append('executedby_model_name')
-        elements.append('executedby_model_url')
-        return elements
-
-    def has_all_required_elements(self):
-        if self.get_required_missing_elements():
-            return False
-        return True
-
-    def get_required_missing_elements(self):  # show missing required meta
-        missing_required_elements = super(ModelInstanceFileMetadata, self). \
-            get_required_missing_elements()
-        if not self.executedby_model_name:
-            missing_required_elements.append('Executed By Model Name')
-
-        return missing_required_elements
 
     @classmethod
     def validate_element_data(cls, request, element_name):
@@ -60,22 +40,19 @@ class ModelInstanceFileMetadata(AbstractFileMetaData):
 
         # get the xml root element and the xml element to which contains all other elements
         RDF_ROOT, container_to_add_to = super(ModelInstanceFileMetadata, self)._get_xml_containers()
-        if self.includes_model_output:
+        if self.model_output:
             self.model_output.add_to_xml_container(container_to_add_to)
 
-        if self.executedby_model_name:
-            self.executedby_model_name.add_to_xml_container(container_to_add_to)
-
-        if self.executedby_model_url:
-            self.executedby_model_url.add_to_xml_container(container_to_add_to)
+        if self.executed_by:
+            self.executed_by.add_to_xml_container(container_to_add_to)
 
         return CoreMetaData.XML_HEADER + '\n' + etree.tostring(RDF_ROOT, encoding='UTF-8',
                                                                pretty_print=pretty_print)
 
 
 class ModelInstanceLogicalFile(AbstractLogicalFile):
-    # In essence, I copied an pasted the GenericLogicalFile and just changed
-    # anything that said "generic" to "model instance"
+    # I copied an pasted the rest GenericLogicalFile and just changed anything
+    # that said "generic" to "model instance"
     metadata = models.OneToOneField(ModelInstanceFileMetadata,
                                     related_name="logical_file")
     # folder path relative to {resource_id}/data/contents/ that represents this aggregation

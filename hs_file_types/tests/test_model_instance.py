@@ -77,65 +77,13 @@ class ModelInstanceTest(MockIRODSTestCaseMixin, TransactionTestCase,
         logical_file = res_file.logical_file
         my_model_name = 'my model'
         my_model_url = 'http://www.google.com'
-        logical_file.metadata.includes_model_output = False
-        logical_file.metadata.executedby_model_name = my_model_name
-        logical_file.metadata.executedby_model_url = my_model_url
-        self.assertEqual(logical_file.metadata.includes_model_output, False)
-        self.assertEqual(logical_file.metadata.executedby_model_name, my_model_name)
-        self.assertEqual(logical_file.metadata.executedby_model_url, my_model_url)
-
-        self.composite_resource.delete()
-
-    def test_model_instance_reqd_metadata_false(self):
-        """Test if we have reqd metadata to logical file """
-
-        self.create_composite_resource()
-        new_folder = 'model_instance_folder'
-        ResourceFile.create_folder(self.composite_resource, new_folder)
-        # add the the txt file to the resource at the above folder
-        self.add_file_to_resource(file_to_add=self.generic_file, upload_folder=new_folder)
-        res_file = self.composite_resource.files.first()
-        self.assertEqual(ModelInstanceLogicalFile.objects.count(), 0)
-        ModelInstanceLogicalFile.set_file_type(self.composite_resource, self.user, folder_path=new_folder)
-        res_file = self.composite_resource.files.first()
-        self.assertEqual(ModelInstanceLogicalFile.objects.count(), 1)
-        self.assertEqual(res_file.logical_file_type_name, self.logical_file_type_name)
-
-        # make sure that has_all_required_elements is True with model name
-        logical_file = res_file.logical_file
-        my_model_name = 'my model'
-        my_model_url = 'http://www.google.com'
-        logical_file.metadata.includes_model_output = False
-        logical_file.metadata.executedby_model_name = my_model_name
-        logical_file.metadata.executedby_model_url = my_model_url
-        self.assertEqual(logical_file.metadata.has_all_required_elements(), True)
-
-        self.composite_resource.delete()
-
-    def test_model_instance_reqd_metadata_true(self):
-        """Test if we have reqd metadata to logical file """
-
-        self.create_composite_resource()
-        new_folder = 'model_instance_folder'
-        ResourceFile.create_folder(self.composite_resource, new_folder)
-        # add the the txt file to the resource at the above folder
-        self.add_file_to_resource(file_to_add=self.generic_file, upload_folder=new_folder)
-        res_file = self.composite_resource.files.first()
-        self.assertEqual(ModelInstanceLogicalFile.objects.count(), 0)
-        ModelInstanceLogicalFile.set_file_type(self.composite_resource, self.user, folder_path=new_folder)
-        res_file = self.composite_resource.files.first()
-        self.assertEqual(ModelInstanceLogicalFile.objects.count(), 1)
-        self.assertEqual(res_file.logical_file_type_name, self.logical_file_type_name)
-
-        # make sure that has_all_required_elements is True with model name
-        logical_file = res_file.logical_file
-        my_model_name = 'my model'
-        my_model_url = 'http://www.google.com'
-        logical_file.metadata.includes_model_output = False
-        logical_file.metadata.executedby_model_url = my_model_url
-        self.assertEqual(logical_file.metadata.has_all_required_elements(), False)
-        missing_el_txt = 'Executed By Model Name'
-        self.assertEqual(logical_file.metadata.get_required_missing_elements(),
-                         [missing_el_txt])
+        logical_file.metadata.create_element('ModelOutput', includes_output=True)
+        logical_file.metadata.create_element('ExecutedBy',
+                                             model_name=my_model_name,
+                                             model_url=my_model_url
+                                             )
+        self.assertEqual(logical_file.metadata.model_output.includes_output, True)
+        self.assertEqual(logical_file.metadata.executed_by.model_name, my_model_name)
+        self.assertEqual(logical_file.metadata.executed_by.model_url, my_model_url)
 
         self.composite_resource.delete()
