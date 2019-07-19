@@ -8,7 +8,7 @@ from hs_core.models import BaseResource, ResourceManager, ResourceFile, resource
 
 
 from hs_file_types.models import GenericLogicalFile, GeoFeatureLogicalFile, GeoRasterLogicalFile, \
-    NetCDFLogicalFile, TimeSeriesLogicalFile, FileSetLogicalFile
+    NetCDFLogicalFile, TimeSeriesLogicalFile, FileSetLogicalFile, ModelInstanceLogicalFile
 from hs_file_types.utils import update_target_temporal_coverage, update_target_spatial_coverage
 
 
@@ -46,6 +46,7 @@ class CompositeResource(BaseResource):
         lf_list.extend(self.georasterlogicalfile_set.all())
         lf_list.extend(self.reftimeserieslogicalfile_set.all())
         lf_list.extend(self.timeserieslogicalfile_set.all())
+        lf_list.extend(self.modelinstancelogicalfile_set.all())
 
         return lf_list
 

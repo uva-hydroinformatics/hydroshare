@@ -5,7 +5,8 @@ from operator import lt, gt
 from hs_core.hydroshare import utils
 
 from .models import GeoRasterLogicalFile, NetCDFLogicalFile, GeoFeatureLogicalFile, \
-    RefTimeseriesLogicalFile, TimeSeriesLogicalFile, GenericLogicalFile, FileSetLogicalFile
+    RefTimeseriesLogicalFile, TimeSeriesLogicalFile, GenericLogicalFile, FileSetLogicalFile, \
+    ModelInstanceLogicalFile
 
 from hs_file_types.models.base import AbstractLogicalFile
 from django.apps import apps
@@ -217,6 +218,7 @@ def get_logical_file_type(res, user, file_id, hs_file_type=None, folder_path=Non
                      "NetCDF": NetCDFLogicalFile,
                      'GeoFeature': GeoFeatureLogicalFile,
                      'RefTimeseries': RefTimeseriesLogicalFile,
+                     'ModelInstance': ModelInstanceLogicalFile,
                      'TimeSeries': TimeSeriesLogicalFile}
     if hs_file_type not in file_type_map:
         if fail_feedback:
