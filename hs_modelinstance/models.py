@@ -47,14 +47,15 @@ class ExecutedBy(AbstractMetaDataElement):
 
     @classmethod
     def create(cls, **kwargs):
-        # pseudo code
-        # 1. check if there is a model_url in the kwargs
-        # 2. check if the model_url is a HS resource or a logical file
-        # 3. if it's an HS resource or logical file check if there is a 'metadata_schema.json' file
-        # 4. if there is a schema doc, add extra metadata terms to the logical file or the resource
-        #    for all of the terms in the doc. The key for these key/value pairs will be the terms
-        #    in the doc. The 'value' will be a blank string that the user will have to fill out for
-        #    now. Maybe later we will have some automatic population.
+        # pseudo code:
+        # if there is a model_url in the kwargs
+        #     if the model_url is a HS resource or a HS logical file
+        #         if the resource or logical file is a model program
+        #              if the model program has a 'metadata_schema.json' file
+        #                   add extra metadata terms to the MI logical file or resource
+        #                   (The key for these key/value pairs will be the terms in the schema doc.
+        #                    The 'value' will be a blank string that the user will have to fill out
+        #                    for now. Maybe later we will have some automatic population.)
         return super(ExecutedBy,cls).create(**kwargs)
 
 # Model Instance Resource type
