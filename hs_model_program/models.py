@@ -101,9 +101,26 @@ class ModelProgramResource(BaseResource):
 
 processor_for(ModelProgramResource)(resource_processor)
 
-
-class ModelProgramMetaData(CoreMetaData):
+class ModelProgramMetaDataMixin(models.Model)
     _mpmetadata = GenericRelation(MpMetadata)
+
+    class Meta:
+        abstract = True
+
+    @property
+    def program(self):
+        return self._mpmetadata.all().first()
+
+    @classmethod
+    def get_supported_element_names(cls):
+        # get the names of all core metadata elements
+        elements = super(ModelProgramMetaDataMixin, cls).get_supported_element_names()
+        # add the name of any additional element to the list
+        elements.append('MpMetadata')
+        return elements
+
+
+class ModelProgramMetaData(ModelProgramMetaDataMixin, CoreMetaData):
 
     @property
     def resource(self):
@@ -115,9 +132,6 @@ class ModelProgramMetaData(CoreMetaData):
         from serializers import ModelProgramMetaDataSerializer
         return ModelProgramMetaDataSerializer(self)
 
-    @property
-    def program(self):
-        return self._mpmetadata.all().first()
 
     @classmethod
     def parse_for_bulk_update(cls, metadata, parsed_metadata):
@@ -128,13 +142,6 @@ class ModelProgramMetaData(CoreMetaData):
         if 'mpmetadata' in keys_to_update:
             parsed_metadata.append({"mpmetadata": metadata.pop('mpmetadata')})
 
-    @classmethod
-    def get_supported_element_names(cls):
-        # get the names of all core metadata elements
-        elements = super(ModelProgramMetaData, cls).get_supported_element_names()
-        # add the name of any additional element to the list
-        elements.append('MpMetadata')
-        return elements
 
     def update(self, metadata, user):
         # overriding the base class update method for bulk update of metadata
