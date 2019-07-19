@@ -7,3 +7,4 @@ from reftimeseries import RefTimeseriesFileMetaData, RefTimeseriesLogicalFile   
 from timeseries import TimeSeriesFileMetaData, TimeSeriesLogicalFile     # noqa
 from fileset import FileSetMetaData, FileSetLogicalFile     # noqa
 from modelinstance import ModelInstanceLogicalFile, ModelInstanceFileMetadata     # noqa
+from modelprogram import ModelProgramFileMetadata, ModelProgramLogicalFile     # noqa

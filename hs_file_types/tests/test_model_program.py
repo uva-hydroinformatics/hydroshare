@@ -74,11 +74,12 @@ class ModelProgramTest(MockIRODSTestCaseMixin, TransactionTestCase,
         res_file = self.composite_resource.files.first()
         self.assertEqual(ModelProgramLogicalFile.objects.count(), 1)
         self.assertEqual(res_file.logical_file_type_name, self.logical_file_type_name)
+        logical_file = res_file.logical_file
 
         ver = '1'
         lang = 'c++'
         os = 'windows'
-        date = '11/21/2015'
+        date = '2015-11-21 00:00'
         site = 'http://www.google.com'
         repo = 'http://github.com/my_sweet_repo'
         cont_repo = 'http://dockerhub.com/my_sweet_repo'
@@ -102,7 +103,8 @@ class ModelProgramTest(MockIRODSTestCaseMixin, TransactionTestCase,
         self.assertEqual(logical_file.metadata.program.modelVersion, ver)
         self.assertEqual(logical_file.metadata.program.modelProgramLanguage, lang)
         self.assertEqual(logical_file.metadata.program.modelOperatingSystem, os)
-        self.assertEqual(logical_file.metadata.program.modelReleaseDate, date)
+        self.assertEqual(logical_file.metadata.program.modelReleaseDate.strftime('%Y-%m-%d %H:%M'),
+                         date)
         self.assertEqual(logical_file.metadata.program.modelWebsite, site)
         self.assertEqual(logical_file.metadata.program.modelCodeRepository, repo)
         self.assertEqual(logical_file.metadata.program.modelContainerRepository, cont_repo)

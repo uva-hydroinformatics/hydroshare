@@ -6,11 +6,11 @@ from django.db import models
 from hs_core.models import ResourceFile, CoreMetaData
 from base import AbstractLogicalFile, AbstractFileMetaData
 
-from hs_modelprogram.models import ModelProgramMetaDataMixin
+from hs_model_program.models import ModelProgramMetaDataMixin
 from lxml import etree
 
 class ModelProgramFileMetadata(ModelProgramMetaDataMixin, AbstractFileMetaData):
-    model_app_label = 'hs_modelprogram'
+    model_app_label = 'hs_model_program'
 
     def get_metadata_elements(self):
         elements = super(ModelProgramFileMetadata, self).get_metadata_elements()
