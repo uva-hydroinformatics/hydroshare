@@ -40,6 +40,11 @@ class MpMetadata(AbstractMetaDataElement):
                                      max_length=255,
                                      help_text='A URL to the source code repository (e.g. git, mercurial, svn)')
 
+    # repository
+    modelContainerRepository = models.CharField(verbose_name='Software Repository', null=True, blank=True,default='',
+                                     max_length=255,
+                                     help_text='A URL to a container repository (e.g. dockerhub)')
+
     # release notes
     modelReleaseNotes = models.CharField(verbose_name="Release Notes", null=True, blank=True, max_length=400,default='',
                                      help_text="Notes regarding the software release (e.g. bug fixes, new functionality, readme)")
@@ -101,7 +106,7 @@ class ModelProgramResource(BaseResource):
 
 processor_for(ModelProgramResource)(resource_processor)
 
-class ModelProgramMetaDataMixin(models.Model)
+class ModelProgramMetaDataMixin(models.Model):
     _mpmetadata = GenericRelation(MpMetadata)
 
     class Meta:
