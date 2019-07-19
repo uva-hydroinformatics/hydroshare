@@ -35,7 +35,7 @@ class ModelOutput(AbstractMetaDataElement):
 class ExecutedBy(AbstractMetaDataElement):
     term = 'ExecutedBy'
     # model_name: the id of the model program used for execution
-    model_name = models.CharField(max_length=500, default=None)
+    model_name = models.CharField(max_length=500, default=None, null=True)
     model_url = models.URLField(max_length=500, default=None, null=True)
 
     def __unicode__(self):
