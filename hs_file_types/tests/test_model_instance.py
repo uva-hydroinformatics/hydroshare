@@ -8,7 +8,7 @@ from hs_core import hydroshare
 from hs_core.models import ResourceFile
 from hs_core.views.utils import move_or_rename_file_or_folder, remove_folder
 from utils import CompositeResourceTestMixin
-from hs_file_types.models import ModelInstanceLogicalFile 
+from hs_file_types.models import ModelInstanceLogicalFile, ModelProgramLogicalFile 
 
 
 class ModelInstanceTest(MockIRODSTestCaseMixin, TransactionTestCase,
@@ -26,10 +26,16 @@ class ModelInstanceTest(MockIRODSTestCaseMixin, TransactionTestCase,
         )
 
         self.res_title = "Test Model Instance Type"
-        self.logical_file_type_name = "ModelInstanceLogicalFile"
+        self.inst_logical_file_type_name = "ModelInstanceLogicalFile"
         base_file_path = 'hs_file_types/tests/{}'
         self.generic_file_name = 'generic_file.txt'
         self.generic_file = base_file_path.format(self.generic_file_name)
+
+        self.prog_res_title = "Test Model Program Type"
+        self.prog_logical_file_type_name = "ModelProgramLogicalFile"
+        prog_base_file_path = 'hs_file_types/tests/data/{}'
+        self.metadata_schema = 'modflow_metadata_schema.json'
+        self.metadata_schema_file = base_file_path.format(self.metadata_schema)
 
     def test_create_model_instance_logical_file(self):
         """Test that we can create a model instance aggregation from a folder that contains one file """
@@ -145,3 +151,83 @@ class ModelInstanceTest(MockIRODSTestCaseMixin, TransactionTestCase,
                          [missing_el_txt])
 
         self.composite_resource.delete()
+
+    def test_model_instance_metadata_schema_link(self):
+        #create MI
+        self.create_composite_resource()
+        new_folder = 'model_instance_folder'
+        ResourceFile.create_folder(self.composite_resource, new_folder)
+        # add the the txt file to the resource at the above folder
+        self.add_file_to_resource(file_to_add=self.generic_file, upload_folder=new_folder)
+        mi_res_file = self.composite_resource.files.first()
+        ModelInstanceLogicalFile.set_file_type(self.composite_resource, self.user, folder_path=new_folder)
+        mi_res_file = self.composite_resource.files.first()
+        self.assertEqual(mi_res_file.logical_file_type_name, self.inst_logical_file_type_name)
+
+        #create MP
+        self.create_composite_resource()
+        new_folder = 'model_program_folder'
+        ResourceFile.create_folder(self.composite_resource, new_folder)
+        # add the the txt file to the resource at the above folder
+        self.add_file_to_resource(file_to_add=self.metadata_schema_file, upload_folder=new_folder)
+        mp_res_file = self.composite_resource.files.first()
+        ModelProgramLogicalFile.set_file_type(self.composite_resource, self.user, folder_path=new_folder)
+        mp_res_file = self.composite_resource.files.first()
+        self.assertEqual(mp_res_file.logical_file_type_name, self.prog_logical_file_type_name)
+        mp_url = mp_res_file.url
+
+        # check to make sure there are no extra metadata terms
+
+        logical_file.metadata.create_element('ExecutedBy',
+                                             model_url=mp_url
+                                             model_name="modflow"
+                                             )
+        
+        modflow_terms = [
+                        "StudyArea",
+                        "totalLength",		
+                        "totalWidth",
+                        "maximumElevation",
+                        "minimumElevation",	
+                        "GridDimensions",
+                        "numberOfLayers",
+                        "typeOfRows",
+                        "numberOfRows",
+                        "typeOfColumns",
+                        "numberOfColumns",	
+                        "StressPeriod",
+                        "stressPeriodType",
+                        "steadyStateValue",
+                        "transientStateValueType",
+                        "transientStateValue",
+                        "GroundWaterFlow",
+                        "flowPackage",
+                        "unsaturatedZonePackage",
+                        "horizontalFlowBarrierPackage",
+                        "seawaterIntrusionPackage",
+                        "flowParameter",	
+                        "BoundaryCondition",
+                        "specified_head_boundary_packages",
+                        "other_specified_head_boundary_packages", 
+                        "specified_flux_boundary_packages", 
+                        "other_specified_flux_boundary_packages", 
+                        "head_dependent_flux_boundary_packages", 
+                        "other_head_dependent_flux_boundary_packages", 
+                        "ModelCalibration",
+                        "calibratedParameter",
+                        "observationType",
+                        "observationProcessPackage",
+                        "calibrationMethod",
+                        "ModelInput",
+                        "inputType",
+                        "inputSourceName",
+                        "inputSourceURL",
+                        "GeneralElements",
+                        "modelParameter", 
+                        "modelSolver", 
+                        "output_control_package", 
+                        "subsidencePackage", 
+                ]
+
+        # check to make sure the extra metadata terms align with the metadata schema file
+
