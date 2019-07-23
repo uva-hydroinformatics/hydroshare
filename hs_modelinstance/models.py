@@ -48,15 +48,43 @@ class ExecutedBy(AbstractMetaDataElement):
     @classmethod
     def create(cls, **kwargs):
         # pseudo code:
-        # if there is a model_url in the kwargs
-        #     if the model_url is a HS resource or a HS logical file
+        # check if there is a model_url in the kwargs
+        model_url = kwargs.get(model_url)
+        resource_re = re.compile("http:www.hydroshare.org/resource/")
+        logical_file_re = re.compile("http:www.hydroshare.org/resource/")
+        if 'model_url':
+            # check if it's a HS resource
+            if re.match(resource_re, model_url):
+                # get HS resource
+
+                # check if resource is an MP
+                # if the resource or logical file is a model program
+                    # check if metadata_schema
+                else:
+                    return super(ExecutedBy,cls).create(**kwargs)
+
+            # check if it's a logical file
+            elif re.match(logical_file_re, model_url):
+                # get logical file
+
+                # check if logical_file is an MP
+                # if the resource or logical file is a model program
+                    # check if metadata_schema
+                else:
+                    return super(ExecutedBy,cls).create(**kwargs)
+
+            # if neither HS res or logical filejust create the resource
+            else:
+                return super(ExecutedBy,cls).create(**kwargs)
         #         if the resource or logical file is a model program
         #              if the model program has a 'metadata_schema.json' file
         #                   add extra metadata terms to the MI logical file or resource
         #                   (The key for these key/value pairs will be the terms in the schema doc.
         #                    The 'value' will be a blank string that the user will have to fill out
         #                    for now. Maybe later we will have some automatic population.)
-        return super(ExecutedBy,cls).create(**kwargs)
+
+        else:
+            return super(ExecutedBy,cls).create(**kwargs)
 
 # Model Instance Resource type
 class ModelInstanceResource(BaseResource):
